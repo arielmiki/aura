@@ -1,0 +1,1 @@
+Pi-Rocky is a Raspberry Pi-based voice-and-vision assistant that uses Google Gemini (Live API) to hold open-ended conversations with a child, recognizing their face and name, adapting its personality, and streaming audio/video responses — all running on a Pi 5 with a camera module, USB microphone, and USB audio output.
