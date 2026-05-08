@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-mac/
 .env
 vocab.json
 *.wav
