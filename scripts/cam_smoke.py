@@ -1,8 +1,11 @@
 """Run on Pi: capture 5 frames and report motion scores."""
 import asyncio
+import sys
 from pathlib import Path
 
-from camera import CameraService
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from camera import CameraService  # noqa: E402
 
 
 async def main() -> None:
