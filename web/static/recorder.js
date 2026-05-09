@@ -1,15 +1,17 @@
-// recorder.js — owns the realtime path: mic, camera, VAD, recording, POST, playback.
+// recorder.js — owns the realtime path: mic, camera, recording, POST, playback.
+//
+// Primary interaction: the TALK button (click to start, click to submit).
+// VAD (silence-based auto-submit) is a secondary path — it auto-submits if
+// you go quiet for 1.2s while recording.
 //
 // State machine:
-//   idle -> listening -> recording -> submitting -> thinking -> speaking -> listening
-//
-// VAD: simple RMS threshold on the mic stream. Threshold is calibrated as
-// (noise floor over first 2s) * 3. Below threshold for 800ms continuously =
-// end of turn. Above threshold for 200ms = start of turn.
+//   idle -> ready -> recording -> submitting -> thinking -> speaking -> ready
 
 const videoEl = document.getElementById('video');
 const audioEl = document.getElementById('audio');
 const statusEl = document.getElementById('status');
+const talkBtn = document.getElementById('talk-btn');
+const meterEl = document.getElementById('meter');
 
 let state = 'idle';
 let mediaStream = null;
@@ -17,22 +19,32 @@ let recorder = null;
 let recordedChunks = [];
 let analyser = null;
 let dataArray = null;
-let noiseFloor = 0.01;        // updated during calibration
-let speechThreshold = 0.05;   // = noiseFloor * 3 (post calibration)
 let belowSince = 0;
-let aboveSince = 0;
-let calibrationDone = false;
-let calibrationSamples = [];
-let calibrationStart = 0;
+let recordingStart = 0;
 
-const SILENCE_MS = 800;
-const SPEECH_START_MS = 200;
-const FRAME_INTERVAL_MS = 50;  // VAD poll cadence
+const SILENCE_AUTO_SUBMIT_MS = 1200;  // generous — easy to keep talking
+const MIN_RECORDING_MS = 400;         // ignore accidental click-click
+const SPEECH_THRESHOLD = 0.015;       // simple fixed threshold
+const METER_INTERVAL_MS = 50;
 
 function setStatus(s) {
   state = s;
   statusEl.textContent = s;
   statusEl.className = 'status status-' + s;
+  // Talk button mirrors state
+  if (s === 'ready') {
+    talkBtn.disabled = false;
+    talkBtn.classList.remove('recording');
+    talkBtn.textContent = 'TALK';
+  } else if (s === 'recording') {
+    talkBtn.disabled = false;
+    talkBtn.classList.add('recording');
+    talkBtn.textContent = 'STOP & SEND';
+  } else {
+    talkBtn.disabled = true;
+    talkBtn.classList.remove('recording');
+    talkBtn.textContent = s.toUpperCase();
+  }
 }
 
 async function init() {
@@ -45,12 +57,13 @@ async function init() {
     setStatus('idle');
     document.getElementById('transcript').innerHTML =
       '<div class="you" style="color:#f55">Camera/mic permission denied — reload and allow.</div>';
+    console.error('getUserMedia failed', e);
     return;
   }
 
   videoEl.srcObject = mediaStream;
 
-  // Web Audio analyser for VAD
+  // Web Audio analyser for the live mic-level meter + silence detection
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaStreamSource(mediaStream);
   analyser = audioCtx.createAnalyser();
@@ -58,9 +71,12 @@ async function init() {
   source.connect(analyser);
   dataArray = new Uint8Array(analyser.fftSize);
 
-  setStatus('listening');
-  calibrationStart = performance.now();
-  setInterval(vadTick, FRAME_INTERVAL_MS);
+  setStatus('ready');
+  setInterval(meterTick, METER_INTERVAL_MS);
+
+  talkBtn.addEventListener('click', onTalkClick);
+
+  console.log('recorder.js ready — click TALK to begin.');
 }
 
 function rms() {
@@ -73,41 +89,21 @@ function rms() {
   return Math.sqrt(sum / dataArray.length);
 }
 
-function vadTick() {
-  // Skip VAD while not in a state where we care about audio level
-  if (state === 'submitting' || state === 'speaking' ||
-      state === 'thinking') return;
-
+function meterTick() {
+  if (!analyser) return;
   const level = rms();
-  const now = performance.now();
+  // Map ~0..0.2 to 0..100% width
+  const pct = Math.min(100, Math.round(level * 500));
+  meterEl.style.width = pct + '%';
+  meterEl.style.background = level > SPEECH_THRESHOLD ? '#f93' : '#5fd';
 
-  // Calibration phase: collect samples for the first 2 seconds.
-  if (!calibrationDone) {
-    calibrationSamples.push(level);
-    if (now - calibrationStart > 2000) {
-      const sorted = [...calibrationSamples].sort((a, b) => a - b);
-      // 80th percentile of "quiet" ~= noise floor
-      noiseFloor = sorted[Math.floor(sorted.length * 0.8)] || 0.01;
-      speechThreshold = Math.max(noiseFloor * 3, 0.02);
-      calibrationDone = true;
-      console.log(`VAD calibrated: noiseFloor=${noiseFloor.toFixed(4)} threshold=${speechThreshold.toFixed(4)}`);
-    }
-    return;
-  }
-
-  if (state === 'listening') {
-    if (level >= speechThreshold) {
-      aboveSince ||= now;
-      if (now - aboveSince > SPEECH_START_MS) {
-        startRecording();
-      }
-    } else {
-      aboveSince = 0;
-    }
-  } else if (state === 'recording') {
-    if (level < speechThreshold) {
+  // Auto-submit on silence while recording
+  if (state === 'recording') {
+    const now = performance.now();
+    if (level < SPEECH_THRESHOLD) {
       belowSince ||= now;
-      if (now - belowSince > SILENCE_MS) {
+      if (now - belowSince > SILENCE_AUTO_SUBMIT_MS &&
+          now - recordingStart > MIN_RECORDING_MS) {
         stopRecordingAndSubmit();
       }
     } else {
@@ -116,9 +112,16 @@ function vadTick() {
   }
 }
 
+function onTalkClick() {
+  if (state === 'ready') {
+    startRecording();
+  } else if (state === 'recording') {
+    stopRecordingAndSubmit();
+  }
+}
+
 function startRecording() {
   recordedChunks = [];
-  // Pick the first MIME type the browser supports
   const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
     .find((m) => MediaRecorder.isTypeSupported(m)) || '';
   recorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
@@ -126,8 +129,9 @@ function startRecording() {
     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
   recorder.start();
-  setStatus('recording');
+  recordingStart = performance.now();
   belowSince = 0;
+  setStatus('recording');
 }
 
 async function stopRecordingAndSubmit() {
@@ -140,6 +144,14 @@ async function stopRecordingAndSubmit() {
   });
 
   const audioBlob = new Blob(recordedChunks, { type: recorder.mimeType });
+  console.log(`recording: ${audioBlob.size} bytes, type=${recorder.mimeType}`);
+
+  if (audioBlob.size < 1000) {
+    console.warn('recording too small — ignoring');
+    setStatus('ready');
+    return;
+  }
+
   const imageBlob = await snapshotFrame();
 
   setStatus('thinking');
@@ -153,25 +165,30 @@ async function stopRecordingAndSubmit() {
     response = await fetch('/turn', { method: 'POST', body: form });
   } catch (e) {
     console.error('POST /turn failed', e);
-    setStatus('listening');
+    setStatus('ready');
     return;
   }
   if (!response.ok) {
     console.error('POST /turn returned', response.status);
-    setStatus('listening');
+    setStatus('ready');
     return;
   }
 
-  // Show transcript + reply (sent as headers; ascii-only)
   const transcript = response.headers.get('X-Transcript') || '';
   const reply = response.headers.get('X-Reply') || '';
+  console.log(`heard: ${JSON.stringify(transcript)}`);
   if (window.rocky) window.rocky.setTranscript(transcript, reply);
 
   const mp3 = await response.blob();
   const url = URL.createObjectURL(mp3);
   audioEl.src = url;
   setStatus('speaking');
-  await audioEl.play();
+  try {
+    await audioEl.play();
+  } catch (e) {
+    console.error('audio play failed', e);
+    setStatus('ready');
+  }
 }
 
 async function snapshotFrame() {
@@ -186,9 +203,7 @@ async function snapshotFrame() {
 }
 
 audioEl.addEventListener('ended', () => {
-  setStatus('listening');
-  belowSince = 0;
-  aboveSince = 0;
+  setStatus('ready');
 });
 
 init();

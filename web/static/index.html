@@ -37,6 +37,29 @@
   .transcript .you   { color: #aaa; }
   .transcript .rocky { color: #5fd; }
 
+  .controls {
+    margin-top: 16px;
+    display: flex; gap: 12px; align-items: center;
+  }
+  #talk-btn {
+    flex: 1; padding: 16px 24px;
+    background: #5fd; color: #0e0e10; border: none; border-radius: 8px;
+    font-family: inherit; font-size: 16px; font-weight: 700;
+    letter-spacing: 0.1em; cursor: pointer;
+    transition: background 0.15s;
+  }
+  #talk-btn:hover { background: #7fe; }
+  #talk-btn:active { background: #3fb; }
+  #talk-btn.recording {
+    background: #f93; color: #fff; animation: pulse 1s infinite;
+  }
+  #talk-btn:disabled { background: #333; color: #777; cursor: not-allowed; animation: none; }
+  .meter {
+    width: 80px; height: 8px; background: #1a1a1d;
+    border: 1px solid #2a2a2d; border-radius: 4px; overflow: hidden;
+  }
+  .meter-fill { height: 100%; background: #5fd; transition: width 0.05s, background 0.05s; }
+
   aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   aside h2 { margin: 0; font-size: 12px; letter-spacing: 0.15em; color: #888; }
   .memory-list { display: flex; flex-direction: column; gap: 8px; }
@@ -59,7 +82,11 @@
     <h1>ROCKY <span id="status" class="status status-idle">idle</span></h1>
     <video id="video" autoplay muted playsinline></video>
     <div class="transcript" id="transcript">
-      <div class="placeholder">Allow camera + microphone, then say hello.</div>
+      <div class="placeholder">Allow camera + microphone, then click TALK and say hello.</div>
+    </div>
+    <div class="controls">
+      <button id="talk-btn" disabled>TALK</button>
+      <div class="meter" title="mic level"><div class="meter-fill" id="meter"></div></div>
     </div>
   </main>
   <aside>
