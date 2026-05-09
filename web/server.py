@@ -1,22 +1,39 @@
-"""FastAPI app exposing vocab + camera + status. Runs in-process with rocky.py."""
+"""FastAPI app for Rocky personal assistant.
+
+Endpoints:
+  GET  /              -> static page (web/static/index.html)
+  POST /turn          -> multipart audio + image -> mp3 stream
+  GET  /api/memories  -> current memories
+  WS   /ws            -> push memory_added / memory_compacted events
+"""
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
-from typing import Optional
+from typing import AsyncIterator
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-import uvicorn
+from llm import Brain
+from memory import MemoryStore
+from conversation import ConversationLog
+from stt import STT
+from tts import TTS
+
+log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "static"
 
 
-def make_app(vocab_store, camera_service, status_provider) -> FastAPI:
-    """status_provider() -> str  (one of: listening|thinking|speaking|idle)"""
+def make_app(memory: MemoryStore,
+             conversation: ConversationLog,
+             brain: Brain,
+             stt: STT,
+             tts: TTS) -> FastAPI:
     app = FastAPI()
 
     @app.get("/")
@@ -25,26 +42,17 @@ def make_app(vocab_store, camera_service, status_provider) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
-    @app.get("/api/vocab")
-    async def api_vocab():
-        return {"entries": vocab_store.entries(), "status": status_provider()}
-
-    @app.get("/frame.jpg")
-    async def frame():
-        jpg = camera_service.latest_jpeg()
-        if not jpg:
-            return Response(status_code=204)
-        return Response(content=jpg, media_type="image/jpeg")
+    @app.get("/api/memories")
+    async def api_memories():
+        return {"entries": memory.entries()}
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
         await websocket.accept()
-        queue = await vocab_store.subscribe()
-        # initial snapshot
+        queue = await memory.subscribe()
         await websocket.send_text(json.dumps({
             "type": "snapshot",
-            "entries": vocab_store.entries(),
-            "status": status_provider(),
+            "entries": memory.entries(),
         }))
         try:
             while True:
@@ -53,12 +61,67 @@ def make_app(vocab_store, camera_service, status_provider) -> FastAPI:
         except WebSocketDisconnect:
             pass
         finally:
-            vocab_store.unsubscribe(queue)
+            memory.unsubscribe(queue)
+
+    @app.post("/turn")
+    async def turn(audio: UploadFile = File(...),
+                   image: UploadFile = File(None)):
+        audio_bytes = await audio.read()
+        image_bytes = await image.read() if image else None
+
+        # 1. STT
+        try:
+            transcript = await asyncio.to_thread(stt.transcribe, audio_bytes)
+        except Exception:
+            log.exception("STT failed")
+            return _fallback_response(tts, "Sorry. Trouble hearing you. Question?")
+
+        if not transcript:
+            return _fallback_response(tts, "Sorry. Didn't catch that.")
+
+        log.info("user: %s", transcript)
+
+        # 2. Brain
+        try:
+            reply = await brain.respond(
+                transcript=transcript,
+                image_jpeg=image_bytes,
+                memories=memory.facts(),
+                conversation=conversation.recent(10),
+            )
+        except Exception:
+            log.exception("Brain failed")
+            return _fallback_response(tts, "Let me think about that.")
+
+        log.info("rocky: %s", reply)
+
+        # 3. Append to conversation log
+        conversation.append(transcript, reply)
+
+        # 4. TTS — stream MP3 back
+        return StreamingResponse(
+            _stream_tts(tts, reply),
+            media_type="audio/mpeg",
+            headers={"X-Transcript": _safe_header(transcript),
+                     "X-Reply": _safe_header(reply)},
+        )
 
     return app
 
 
-async def serve(app: FastAPI, port: int = 8000) -> None:
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    await server.serve()
+def _safe_header(s: str) -> str:
+    """Sanitize for ASCII-only HTTP header value (avoid latin-1 errors)."""
+    return s.encode("ascii", "ignore").decode("ascii")[:500]
+
+
+async def _stream_tts(tts: TTS, text: str) -> AsyncIterator[bytes]:
+    async for chunk in tts.stream(text):
+        yield chunk
+
+
+def _fallback_response(tts: TTS, text: str) -> StreamingResponse:
+    return StreamingResponse(
+        _stream_tts(tts, text),
+        media_type="audio/mpeg",
+        headers={"X-Reply": _safe_header(text), "X-Fallback": "1"},
+    )
