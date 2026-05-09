@@ -6,11 +6,13 @@ import logging
 import os
 from pathlib import Path
 
+import numpy as np
 from dotenv import load_dotenv
 
 from audio import MicStream, SpeakerStream
 from brain import GeminiBrain
 from camera import CameraService
+from idle import IdleGate, run_idle_loop
 from vocab import VocabStore
 from web.server import make_app, serve
 
@@ -64,6 +66,11 @@ async def amain() -> None:
     )
     await brain.start()
 
+    gate = IdleGate(silence_secs=30.0, motion_threshold=5.0, cooldown_secs=60.0)
+    idle_task = asyncio.create_task(
+        run_idle_loop(gate, cam, brain, get_silent_for=lambda: 0.0)
+    )
+
     app = make_app(vocab, cam, lambda: status.value)
     web_task = asyncio.create_task(serve(app, port=port))
 
@@ -72,6 +79,9 @@ async def amain() -> None:
         async for chunk in mic.chunks():
             status.set(vocab, "speaking" if spk.is_speaking else "listening")
             await brain.send_audio(chunk)
+            arr = np.frombuffer(chunk, dtype=np.int16)
+            if int(np.max(np.abs(arr))) > 800:
+                gate.note_user_audio()
             now = asyncio.get_event_loop().time()
             jpg = cam.latest_jpeg()
             if jpg and now - last_frame_time > 1.0:
@@ -82,6 +92,7 @@ async def amain() -> None:
     try:
         await pump_mic()
     finally:
+        idle_task.cancel()
         web_task.cancel()
         await brain.stop()
         await cam.stop()
