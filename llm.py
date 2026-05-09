@@ -176,9 +176,10 @@ class Brain:
         # Reset the emotion for this turn; set_emotion tool will update it.
         self.last_emotion = "neutral"
 
-        # Pick which tools are available this turn. Always include remember
-        # and set_emotion; include recall_visual only if a callback is wired.
-        tools = [REMEMBER_TOOL, SET_EMOTION_TOOL]
+        # Pick which tools are available this turn. Always include remember;
+        # include recall_visual only if a callback is wired. (set_emotion is
+        # no longer exposed — the UI uses the sphere viz, not an avatar.)
+        tools = [REMEMBER_TOOL]
         if self._on_recall_visual is not None:
             tools.append(RECALL_VISUAL_TOOL)
 
