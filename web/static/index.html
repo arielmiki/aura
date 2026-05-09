@@ -42,20 +42,41 @@
     z-index: 1000;
   }
 
-  /* Layout: main + sidebar */
+  /* Layout: 3 columns + header. Transcript on the left gets a full
+     viewport-height column so chat history has room to breathe. */
   .app {
     display: grid;
-    grid-template-columns: 1fr 320px;
-    grid-template-rows: 1fr;
+    grid-template-columns: 340px 1fr 320px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "topbar topbar topbar"
+      "convo  stage  memo";
     gap: 16px;
-    padding: 24px;
+    padding: 20px;
     height: 100vh;
+    min-height: 0;
   }
+  .topbar           { grid-area: topbar; }
+  .conversation-pane { grid-area: convo; }
+  .stage-pane       { grid-area: stage; }
+  .memory-pane      { grid-area: memo; }
+
+  .conversation-pane,
+  .memory-pane,
+  .stage-pane {
+    display: flex; flex-direction: column; gap: 12px;
+    min-height: 0;  /* permits child flex/overflow inside grid */
+  }
+
+  .stage-pane { gap: 16px; }
+  .conversation-pane h2,
+  .memory-pane h2 { flex: 0 0 auto; }
 
   /* Header */
   .header {
     display: flex; align-items: center; gap: 16px;
-    margin-bottom: 8px;
+    flex-wrap: wrap;
+    padding: 4px 0;
   }
   .brand {
     font-weight: 800;
@@ -136,7 +157,8 @@
     min-width: 0;
   }
 
-  /* Stage: orb + camera thumbnail */
+  /* Stage: visualizer + camera thumbnail. Fills the available height in
+     the center column. */
   .stage {
     position: relative;
     background: var(--panel);
@@ -148,7 +170,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 240px;
+    flex: 1 1 auto;
+    min-height: 0;
     isolation: isolate;
   }
   .stage::before {
@@ -191,8 +214,8 @@
     text-shadow: 0 0 4px rgba(0,0,0,0.9);
   }
 
-  /* Transcript stream — chat history. Scrolls smoothly within a fixed
-     viewport-relative height regardless of how many turns accumulate. */
+  /* Transcript stream — chat history. Lives in its own left column and
+     fills the available vertical space; scrolls smoothly. */
   .transcript {
     background: var(--panel);
     border: 1px solid var(--panel-border);
@@ -200,8 +223,8 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 16px 20px;
+    flex: 1 1 auto;
     min-height: 0;
-    max-height: 38vh;
     overflow-y: auto;
     overscroll-behavior: contain;
     scroll-behavior: smooth;
@@ -295,8 +318,8 @@
     transition: height 0.05s;
   }
 
-  /* Sidebar — memories */
-  aside {
+  /* Reusable card style for grouped content in side panes */
+  .pane-card {
     background: var(--panel);
     border: 1px solid var(--panel-border);
     border-radius: 18px;
@@ -304,15 +327,21 @@
     -webkit-backdrop-filter: blur(12px);
     padding: 20px;
     display: flex; flex-direction: column; gap: 12px;
-    overflow: hidden;
+    min-height: 0;
   }
-  aside h2 {
+  /* Shared section heading style for sidebars + transcript */
+  .pane-card h2,
+  .conversation-pane h2,
+  .memory-pane h2 {
     margin: 0;
     font-size: 11px;
     letter-spacing: 0.3em;
     color: var(--cyan);
     text-shadow: 0 0 8px rgba(90,216,255,0.4);
   }
+  /* Memory pane wraps its content in a flex column. */
+  .memory-pane > .pane-card { flex: 0 0 auto; }
+  .memory-pane > .pane-card.memories-card { flex: 1 1 auto; overflow: hidden; }
   .memory-count {
     font-size: 10px; color: var(--muted);
     letter-spacing: 0.15em;
@@ -320,7 +349,9 @@
   .memory-list {
     display: flex; flex-direction: column; gap: 8px;
     overflow-y: auto;
-    flex: 1;
+    overscroll-behavior: contain;
+    flex: 1 1 auto;
+    min-height: 0;
     padding-right: 4px;
   }
   .memory-list::-webkit-scrollbar { width: 4px; }
@@ -515,7 +546,7 @@
 </head>
 <body>
   <div class="app">
-    <main>
+    <header class="topbar">
       <div class="header">
         <div class="brand">ROCKY</div>
         <div id="status" class="pill status-idle">idle</div>
@@ -529,7 +560,16 @@
           <span class="corpus-status" id="corpus-status">idle</span>
         </div>
       </div>
+    </header>
 
+    <section class="conversation-pane">
+      <h2 style="padding: 0 4px">CONVERSATION</h2>
+      <div class="transcript" id="transcript">
+        <div class="empty">Allow camera + microphone, click TALK, say hello.</div>
+      </div>
+    </section>
+
+    <main class="stage-pane">
       <div class="stage">
         <canvas id="viz"></canvas>
         <div class="cam-thumb">
@@ -538,17 +578,13 @@
         </div>
       </div>
 
-      <div class="transcript" id="transcript">
-        <div class="empty">Allow camera + microphone, click TALK, say hello.</div>
-      </div>
-
       <div class="controls">
         <button id="talk-btn" disabled>TALK</button>
         <div class="meter" title="mic level"><div class="meter-fill" id="meter"></div></div>
       </div>
     </main>
 
-    <aside>
+    <aside class="memory-pane">
       <div class="adapt-card" id="adapt-card">
         <div class="adapt-header">
           <h2>ADAPTED</h2>
@@ -570,12 +606,14 @@
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <h2>MEMORIES</h2>
-        <span class="memory-count" id="memory-count">0</span>
-      </div>
-      <div class="memory-list" id="memories">
-        <div class="empty-mem">no memories yet</div>
+      <div class="pane-card memories-card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <h2>MEMORIES</h2>
+          <span class="memory-count" id="memory-count">0</span>
+        </div>
+        <div class="memory-list" id="memories">
+          <div class="empty-mem">no memories yet</div>
+        </div>
       </div>
     </aside>
   </div>
