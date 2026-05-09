@@ -22,7 +22,7 @@ from llm import Brain
 from memory import MemoryStore
 from conversation import ConversationLog
 from stt import STT
-from tts import TTS
+from tts import TTS, detect_language
 
 log = logging.getLogger(__name__)
 
@@ -178,12 +178,17 @@ def make_app(memory: MemoryStore,
         # 3. Append to conversation log
         conversation.append(transcript, reply)
 
-        # 4. TTS — stream MP3 back
+        # 4. TTS — match the user's language so the voice doesn't switch
+        # mid-conversation. Detect from the transcript (more reliable than
+        # the reply, which may carry over a few stock English tokens like
+        # "Friend" even when the user spoke Indonesian).
+        lang = detect_language(transcript)
         return StreamingResponse(
-            _stream_tts(tts, reply),
+            _stream_tts(tts, reply, lang),
             media_type="audio/mpeg",
             headers={"X-Transcript": _safe_header(transcript),
-                     "X-Reply": _safe_header(reply)},
+                     "X-Reply": _safe_header(reply),
+                     "X-Lang": lang},
         )
 
     return app
@@ -194,8 +199,8 @@ def _safe_header(s: str) -> str:
     return s.encode("ascii", "ignore").decode("ascii")[:500]
 
 
-async def _stream_tts(tts: TTS, text: str) -> AsyncIterator[bytes]:
-    async for chunk in tts.stream(text):
+async def _stream_tts(tts: TTS, text: str, language_code: str = None) -> AsyncIterator[bytes]:
+    async for chunk in tts.stream(text, language_code=language_code):
         yield chunk
 
 

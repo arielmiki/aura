@@ -30,7 +30,10 @@ INDONESIAN_HINTS = re.compile(
     r"sudah|akan|bisa|mau|harus|"
     r"ini|itu|apa|siapa|kenapa|bagaimana|"
     r"baik|bagus|jelek|"
-    r"ya|iya|terima\s+kasih"
+    r"ya|iya|terima\s+kasih|"
+    r"halo|hai|selamat|nama|senang|bertemu|"
+    r"makan|minum|tidur|jalan|"
+    r"pagi|siang|sore|malam"
     r")\b",
     re.IGNORECASE,
 )
