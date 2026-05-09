@@ -1,10 +1,18 @@
 // app.js — page state + WebSocket subscription.
 // recorder.js owns mic/camera/POST.
 
-const memoriesEl  = document.getElementById('memories');
+const memoriesEl   = document.getElementById('memories');
+const memCountEl   = document.getElementById('memory-count');
 const transcriptEl = document.getElementById('transcript');
 
+let isFirstTurn = true;
+
 function renderMemories(entries, justAddedId) {
+  memCountEl.textContent = entries.length;
+  if (entries.length === 0) {
+    memoriesEl.innerHTML = '<div class="empty-mem">no memories yet</div>';
+    return;
+  }
   memoriesEl.innerHTML = '';
   // Most recent first
   for (const e of [...entries].reverse()) {
@@ -15,24 +23,49 @@ function renderMemories(entries, justAddedId) {
   }
 }
 
-function setTranscript(youText, rockyText) {
-  transcriptEl.innerHTML = '';
+function appendTurn(youText, rockyText) {
+  if (isFirstTurn) {
+    transcriptEl.innerHTML = '';
+    isFirstTurn = false;
+  }
+  const turn = document.createElement('div');
+  turn.className = 'turn';
   if (youText) {
     const a = document.createElement('div');
     a.className = 'you';
-    a.textContent = '> ' + youText;
-    transcriptEl.appendChild(a);
+    a.innerHTML = '<span class="label">YOU</span>' + escapeHtml(youText);
+    turn.appendChild(a);
   }
   if (rockyText) {
     const b = document.createElement('div');
     b.className = 'rocky';
-    b.textContent = rockyText;
-    transcriptEl.appendChild(b);
+    b.innerHTML = '<span class="label">ROCKY</span>' + escapeHtml(rockyText);
+    turn.appendChild(b);
   }
+  transcriptEl.appendChild(turn);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
-// Expose for recorder.js
-window.rocky = { setTranscript };
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Mirror the status pill's class onto the orb so its animation tracks state.
+const orbEl = document.getElementById('orb');
+const statusEl = document.getElementById('status');
+const syncOrb = () => {
+  const m = statusEl.className.match(/status-([a-z]+)/);
+  orbEl.className = 'orb' + (m ? ' ' + m[1] : '');
+};
+new MutationObserver(syncOrb).observe(statusEl, { attributes: true, attributeFilter: ['class'] });
+syncOrb();
+
+// Expose for recorder.js (keeps the existing call signature)
+window.rocky = {
+  setTranscript: appendTurn,
+};
 
 const ws = new WebSocket(
   (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws'

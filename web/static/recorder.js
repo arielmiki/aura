@@ -30,7 +30,7 @@ const METER_INTERVAL_MS = 50;
 function setStatus(s) {
   state = s;
   statusEl.textContent = s;
-  statusEl.className = 'status status-' + s;
+  statusEl.className = 'pill status-' + s;
   // Talk button mirrors state
   if (s === 'ready') {
     talkBtn.disabled = false;
@@ -92,10 +92,9 @@ function rms() {
 function meterTick() {
   if (!analyser) return;
   const level = rms();
-  // Map ~0..0.2 to 0..100% width
+  // Map ~0..0.2 to 0..100% height (vertical bar)
   const pct = Math.min(100, Math.round(level * 500));
-  meterEl.style.width = pct + '%';
-  meterEl.style.background = level > SPEECH_THRESHOLD ? '#f93' : '#5fd';
+  meterEl.style.height = pct + '%';
 
   // Auto-submit on silence while recording
   if (state === 'recording') {
