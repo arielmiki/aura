@@ -1,11 +1,14 @@
 // recorder.js — owns the realtime path: mic, camera, recording, POST, playback.
 //
 // Primary interaction: the TALK button (click to start, click to submit).
-// VAD (silence-based auto-submit) is a secondary path — it auto-submits if
-// you go quiet for 1.2s while recording.
+// VAD silence auto-submit is a secondary path (1.2s of quiet while recording).
 //
 // State machine:
 //   idle -> ready -> recording -> submitting -> thinking -> speaking -> ready
+//
+// The button is ALWAYS enabled. If you click while state==idle, we lazily
+// acquire mic+camera. This means even if the auto-init failed (permission
+// not yet granted, page just opened), the first click triggers the prompt.
 
 const videoEl = document.getElementById('video');
 const audioEl = document.getElementById('audio');
@@ -22,48 +25,46 @@ let dataArray = null;
 let belowSince = 0;
 let recordingStart = 0;
 
-const SILENCE_AUTO_SUBMIT_MS = 1200;  // generous — easy to keep talking
-const MIN_RECORDING_MS = 400;         // ignore accidental click-click
-const SPEECH_THRESHOLD = 0.015;       // simple fixed threshold
+const SILENCE_AUTO_SUBMIT_MS = 1200;
+const MIN_RECORDING_MS = 400;
+const SPEECH_THRESHOLD = 0.015;
 const METER_INTERVAL_MS = 50;
 
 function setStatus(s) {
   state = s;
   statusEl.textContent = s;
   statusEl.className = 'pill status-' + s;
-  // Talk button mirrors state
-  if (s === 'ready') {
-    talkBtn.disabled = false;
-    talkBtn.classList.remove('recording');
-    talkBtn.textContent = 'TALK';
-  } else if (s === 'recording') {
-    talkBtn.disabled = false;
+  if (s === 'recording') {
     talkBtn.classList.add('recording');
     talkBtn.textContent = 'STOP & SEND';
   } else {
-    talkBtn.disabled = true;
     talkBtn.classList.remove('recording');
-    talkBtn.textContent = s.toUpperCase();
+    if (s === 'ready' || s === 'idle') {
+      talkBtn.textContent = 'TALK';
+    } else {
+      talkBtn.textContent = s.toUpperCase();
+    }
   }
+  // Button is enabled in idle/ready/recording so the user can always click.
+  talkBtn.disabled = !(s === 'idle' || s === 'ready' || s === 'recording');
+  console.log('[rocky] state=', s);
 }
 
-async function init() {
+async function ensureMedia() {
+  if (mediaStream) return true;
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
       video: { width: { ideal: 640 }, height: { ideal: 480 } },
     });
   } catch (e) {
-    setStatus('idle');
     document.getElementById('transcript').innerHTML =
-      '<div class="you" style="color:#f55">Camera/mic permission denied — reload and allow.</div>';
-    console.error('getUserMedia failed', e);
-    return;
+      '<div class="empty" style="color:#f87">Camera/mic permission denied — fix in browser settings and reload.</div>';
+    console.error('[rocky] getUserMedia failed', e);
+    return false;
   }
-
   videoEl.srcObject = mediaStream;
 
-  // Web Audio analyser for the live mic-level meter + silence detection
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaStreamSource(mediaStream);
   analyser = audioCtx.createAnalyser();
@@ -71,12 +72,19 @@ async function init() {
   source.connect(analyser);
   dataArray = new Uint8Array(analyser.fftSize);
 
-  setStatus('ready');
   setInterval(meterTick, METER_INTERVAL_MS);
+  console.log('[rocky] media ready');
+  return true;
+}
 
+async function init() {
+  setStatus('idle');
   talkBtn.addEventListener('click', onTalkClick);
-
-  console.log('recorder.js ready — click TALK to begin.');
+  // Try to acquire media eagerly; if the user hasn't granted yet, this
+  // triggers the browser permission prompt. If it succeeds, we go to ready.
+  if (await ensureMedia()) {
+    setStatus('ready');
+  }
 }
 
 function rms() {
@@ -92,11 +100,10 @@ function rms() {
 function meterTick() {
   if (!analyser) return;
   const level = rms();
-  // Map ~0..0.2 to 0..100% height (vertical bar)
   const pct = Math.min(100, Math.round(level * 500));
   meterEl.style.height = pct + '%';
 
-  // Auto-submit on silence while recording
+  // Auto-submit on sustained silence while recording
   if (state === 'recording') {
     const now = performance.now();
     if (level < SPEECH_THRESHOLD) {
@@ -111,19 +118,34 @@ function meterTick() {
   }
 }
 
-function onTalkClick() {
-  if (state === 'ready') {
-    startRecording();
-  } else if (state === 'recording') {
-    stopRecordingAndSubmit();
+async function onTalkClick() {
+  console.log('[rocky] TALK clicked, state=', state);
+  if (state === 'recording') {
+    await stopRecordingAndSubmit();
+    return;
   }
+  // Anything else: try to start. Lazily acquire media if we don't have it.
+  if (!mediaStream) {
+    const ok = await ensureMedia();
+    if (!ok) return;
+  }
+  startRecording();
 }
 
 function startRecording() {
+  if (!mediaStream) {
+    console.error('[rocky] no mediaStream');
+    return;
+  }
   recordedChunks = [];
   const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
     .find((m) => MediaRecorder.isTypeSupported(m)) || '';
-  recorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+  try {
+    recorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+  } catch (e) {
+    console.error('[rocky] MediaRecorder construct failed', e);
+    return;
+  }
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
@@ -134,7 +156,10 @@ function startRecording() {
 }
 
 async function stopRecordingAndSubmit() {
-  if (!recorder || recorder.state === 'inactive') return;
+  if (!recorder || recorder.state === 'inactive') {
+    setStatus('ready');
+    return;
+  }
   setStatus('submitting');
 
   await new Promise((resolve) => {
@@ -143,10 +168,10 @@ async function stopRecordingAndSubmit() {
   });
 
   const audioBlob = new Blob(recordedChunks, { type: recorder.mimeType });
-  console.log(`recording: ${audioBlob.size} bytes, type=${recorder.mimeType}`);
+  console.log(`[rocky] recorded: ${audioBlob.size} bytes, type=${recorder.mimeType}`);
 
   if (audioBlob.size < 1000) {
-    console.warn('recording too small — ignoring');
+    console.warn('[rocky] recording too small — ignoring');
     setStatus('ready');
     return;
   }
@@ -163,19 +188,20 @@ async function stopRecordingAndSubmit() {
   try {
     response = await fetch('/turn', { method: 'POST', body: form });
   } catch (e) {
-    console.error('POST /turn failed', e);
+    console.error('[rocky] POST /turn failed', e);
     setStatus('ready');
     return;
   }
   if (!response.ok) {
-    console.error('POST /turn returned', response.status);
+    console.error('[rocky] POST /turn returned', response.status);
     setStatus('ready');
     return;
   }
 
   const transcript = response.headers.get('X-Transcript') || '';
   const reply = response.headers.get('X-Reply') || '';
-  console.log(`heard: ${JSON.stringify(transcript)}`);
+  console.log(`[rocky] heard: ${JSON.stringify(transcript)}`);
+  console.log(`[rocky] reply: ${JSON.stringify(reply)}`);
   if (window.rocky) window.rocky.setTranscript(transcript, reply);
 
   const mp3 = await response.blob();
@@ -185,7 +211,7 @@ async function stopRecordingAndSubmit() {
   try {
     await audioEl.play();
   } catch (e) {
-    console.error('audio play failed', e);
+    console.error('[rocky] audio play failed', e);
     setStatus('ready');
   }
 }
