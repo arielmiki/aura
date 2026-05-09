@@ -17,7 +17,8 @@ function renderMemories(entries, justAddedId) {
   // Most recent first
   for (const e of [...entries].reverse()) {
     const div = document.createElement('div');
-    div.className = 'memory' + (e.id === justAddedId ? ' new' : '');
+    div.className = 'memory' + (e.id === justAddedId ? ' new' : '') +
+                    (e.has_image ? '' : ' no-image');
     if (e.has_image) {
       const img = document.createElement('img');
       img.className = 'memory-thumb';
@@ -30,6 +31,10 @@ function renderMemories(entries, justAddedId) {
     fact.className = 'memory-fact';
     fact.textContent = e.fact;
     div.appendChild(fact);
+    if (e.has_image) {
+      div.addEventListener('click', () => openMemory(e));
+      div.title = 'Click to view full image';
+    }
     memoriesEl.appendChild(div);
   }
 }
@@ -104,13 +109,11 @@ function pulseAdaptCard() {
   adaptPulseEl.classList.add('flash');
 }
 
-// ---------------- Adaption Labs corpus card ----------------
+// ---------------- Adaption Labs corpus mini ----------------
+// Auto-runs on the server every 5 turns; UI just shows status.
 
 const corpusStatusEl = document.getElementById('corpus-status');
 const corpusTurnsEl  = document.getElementById('corpus-turns');
-const corpusRowsEl   = document.getElementById('corpus-rows');
-const corpusIdEl     = document.getElementById('corpus-id');
-const adaptBtn       = document.getElementById('adapt-btn');
 
 let lastTurnCount = 0;
 
@@ -118,12 +121,6 @@ function setCorpusStatus(status) {
   if (!corpusStatusEl) return;
   corpusStatusEl.textContent = status || 'idle';
   corpusStatusEl.className = 'corpus-status ' + (status || 'idle');
-  // Disable the button while a run is mid-flight to avoid duplicate uploads.
-  if (adaptBtn) {
-    const inFlight = status === 'uploading' || status === 'running';
-    adaptBtn.disabled = inFlight;
-    adaptBtn.textContent = inFlight ? status.toUpperCase() + '…' : 'ADAPT NOW';
-  }
 }
 
 function renderCorpus(state, turnCount) {
@@ -133,43 +130,45 @@ function renderCorpus(state, turnCount) {
     lastTurnCount = turnCount;
     corpusTurnsEl.textContent = String(turnCount);
   }
-  corpusRowsEl.textContent = state.row_count
-    ? `${state.row_count} rows`
-    : '—';
-  corpusIdEl.textContent = state.dataset_id
-    ? state.dataset_id.slice(0, 12) + '…'
-    : '—';
 }
 
-if (adaptBtn) {
-  adaptBtn.addEventListener('click', async () => {
-    setCorpusStatus('uploading');
-    try {
-      const r = await fetch('/api/adapt', { method: 'POST' });
-      const j = await r.json();
-      if (j.error) {
-        console.error('[adapt] error:', j.error);
-        setCorpusStatus('failed');
-      } else if (j.state) {
-        renderCorpus(j.state);
-      }
-    } catch (e) {
-      console.error('[adapt] request failed', e);
-      setCorpusStatus('failed');
-    }
-  });
-}
-
-// While running, poll status every 4 s so the UI updates without a refresh.
+// While a run is in flight, poll for completion so the UI flips to "completed".
 setInterval(async () => {
-  if (corpusStatusEl?.textContent !== 'running' &&
-      corpusStatusEl?.textContent !== 'uploading') return;
+  const s = corpusStatusEl?.textContent;
+  if (s !== 'running' && s !== 'uploading') return;
   try {
     const r = await fetch('/api/adapt/refresh', { method: 'POST' });
     const j = await r.json();
     if (j.state) renderCorpus(j.state);
   } catch (_) {}
-}, 4000);
+}, 5000);
+
+// ---------------- Memory lightbox ----------------
+
+const lightboxEl   = document.getElementById('lightbox');
+const lightboxImg  = document.getElementById('lightbox-img');
+const lightboxFact = document.getElementById('lightbox-fact');
+const lightboxWhen = document.getElementById('lightbox-when');
+
+function openMemory(entry) {
+  if (!entry) return;
+  lightboxImg.src = entry.has_image ? '/memory/image/' + entry.id : '';
+  lightboxImg.style.display = entry.has_image ? '' : 'none';
+  lightboxFact.textContent = entry.fact;
+  const ts = new Date((entry.saved_at || 0) * 1000);
+  lightboxWhen.textContent = isNaN(ts.getTime())
+    ? ''
+    : 'saved ' + ts.toLocaleString();
+  lightboxEl.hidden = false;
+}
+
+function closeLightbox() { lightboxEl.hidden = true; }
+
+lightboxEl.querySelectorAll('[data-close]').forEach((el) =>
+  el.addEventListener('click', closeLightbox));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !lightboxEl.hidden) closeLightbox();
+});
 
 // Expose for recorder.js (keeps the existing call signature)
 window.rocky = {

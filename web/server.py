@@ -27,6 +27,7 @@ from tts import TTS, detect_language
 log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "static"
+AUTO_ADAPT_EVERY_N_TURNS = 5  # fire an adaptation run after every N completed turns
 
 
 def make_app(memory: MemoryStore,
@@ -178,17 +179,26 @@ def make_app(memory: MemoryStore,
         # 3. Append to conversation log
         conversation.append(transcript, reply)
 
-        # 4. TTS — match the user's language so the voice doesn't switch
-        # mid-conversation. Detect from the transcript (more reliable than
-        # the reply, which may carry over a few stock English tokens like
-        # "Friend" even when the user spoke Indonesian).
-        lang = detect_language(transcript)
+        # 3.5. Auto-adaptation: every N turns, kick off an adaptation run in
+        # the background so Rocky's growing corpus stays continuously prepped
+        # for fine-tuning. We don't await it — failures are logged silently.
+        turn_count = len(conversation.turns())
+        if (adapter.configured
+                and turn_count > 0
+                and turn_count % AUTO_ADAPT_EVERY_N_TURNS == 0
+                and adapter.state().get("status") not in ("uploading", "running")):
+            log.info("auto-adapt: triggering at turn %d", turn_count)
+            asyncio.create_task(_run_adapt(adapter, conversation.turns()))
+
+        # 4. TTS — Rocky's output is always English by policy (the persona
+        # prompt enforces this). Pin language_code='en' so the voice stays
+        # consistent even if Gemini accidentally drops in a foreign word.
         return StreamingResponse(
-            _stream_tts(tts, reply, lang),
+            _stream_tts(tts, reply, "en"),
             media_type="audio/mpeg",
             headers={"X-Transcript": _safe_header(transcript),
                      "X-Reply": _safe_header(reply),
-                     "X-Lang": lang},
+                     "X-Lang": "en"},
         )
 
     return app
@@ -202,6 +212,15 @@ def _safe_header(s: str) -> str:
 async def _stream_tts(tts: TTS, text: str, language_code: str = None) -> AsyncIterator[bytes]:
     async for chunk in tts.stream(text, language_code=language_code):
         yield chunk
+
+
+async def _run_adapt(adapter, turns: list[dict]) -> None:
+    """Background-task wrapper around adapter.adapt() that swallows errors
+    so a transient Adaption Labs hiccup never breaks the chat path."""
+    try:
+        await adapter.adapt(turns)
+    except Exception:
+        log.exception("auto-adapt failed")
 
 
 def _fallback_response(tts: TTS, text: str) -> StreamingResponse:

@@ -191,7 +191,8 @@
     text-shadow: 0 0 4px rgba(0,0,0,0.9);
   }
 
-  /* Transcript stream — chat history */
+  /* Transcript stream — chat history. Scrolls smoothly within a fixed
+     viewport-relative height regardless of how many turns accumulate. */
   .transcript {
     background: var(--panel);
     border: 1px solid var(--panel-border);
@@ -199,9 +200,11 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 16px 20px;
-    min-height: 120px;
-    max-height: 32vh;
+    min-height: 0;
+    max-height: 38vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
     display: flex; flex-direction: column; gap: 10px;
     font-size: 14px; line-height: 1.5;
   }
@@ -441,6 +444,73 @@
     background: rgba(20,28,48,0.4);
     cursor: not-allowed;
   }
+
+  /* Corpus mini status pill in the header */
+  .corpus-mini {
+    margin-left: 8px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid rgba(95,255,177,0.25);
+    border-radius: 99px;
+    background: rgba(95,255,177,0.05);
+    font-size: 10px; letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+  .corpus-mini-label { color: var(--green); font-weight: 700; }
+  .corpus-mini-count { color: var(--cyan); font-weight: 700; min-width: 1ch; }
+  .corpus-mini .corpus-status { padding: 0; border: none; background: transparent; }
+
+  /* Lightbox */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 999;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .lightbox[hidden] { display: none; }
+  .lightbox-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+  .lightbox-card {
+    position: relative; z-index: 1;
+    max-width: 720px; width: 90vw;
+    background: linear-gradient(135deg, rgba(20,28,48,0.95), rgba(10,15,30,0.95));
+    border: 1px solid rgba(120,200,255,0.3);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    pointer-events: auto;
+    animation: lightbox-in 0.25s ease-out;
+  }
+  @keyframes lightbox-in {
+    0% { transform: scale(0.94); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .lightbox-close {
+    position: absolute; top: 12px; right: 12px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(108,122,150,0.2); color: var(--text);
+    border: 1px solid rgba(120,200,255,0.2);
+    font-size: 22px; line-height: 1; cursor: pointer;
+  }
+  .lightbox-close:hover { background: rgba(255,90,90,0.3); border-color: rgba(255,90,90,0.5); }
+  .lightbox-img {
+    width: 100%; max-height: 60vh; object-fit: contain;
+    border-radius: 8px; background: #000;
+    border: 1px solid var(--panel-border);
+  }
+  .lightbox-meta { margin-top: 14px; }
+  .lightbox-fact { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+  .lightbox-when { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
+
+  /* Make memory cards feel clickable */
+  .memory { cursor: pointer; }
+  .memory:active { transform: scale(0.98); }
+  .memory.no-image { cursor: default; }
+  .memory.no-image:active { transform: none; }
 </style>
 </head>
 <body>
@@ -452,6 +522,11 @@
         <div class="mode-toggle">
           <button class="mode-btn active" data-mode="open">OPEN MIC</button>
           <button class="mode-btn" data-mode="ptt">PUSH TO TALK</button>
+        </div>
+        <div class="corpus-mini" id="corpus-mini" title="Adaption Labs auto-runs every 5 turns">
+          <span class="corpus-mini-label">CORPUS</span>
+          <span class="corpus-mini-count" id="corpus-turns">0</span>
+          <span class="corpus-status" id="corpus-status">idle</span>
         </div>
       </div>
 
@@ -495,27 +570,6 @@
         </div>
       </div>
 
-      <div class="adapt-card adapt-corpus" id="corpus-card">
-        <div class="adapt-header">
-          <h2>TRAINING CORPUS</h2>
-          <span class="corpus-status" id="corpus-status">idle</span>
-        </div>
-        <div class="adapt-rows">
-          <div class="adapt-row">
-            <span class="adapt-key">TURNS</span>
-            <span class="adapt-val" id="corpus-turns">0</span>
-          </div>
-          <div class="adapt-row">
-            <span class="adapt-key">LAST RUN</span>
-            <span class="adapt-val" id="corpus-rows">—</span>
-          </div>
-          <div class="adapt-row">
-            <span class="adapt-key">DATASET ID</span>
-            <span class="adapt-val small" id="corpus-id">—</span>
-          </div>
-        </div>
-        <button id="adapt-btn" class="corpus-btn">ADAPT NOW</button>
-      </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <h2>MEMORIES</h2>
         <span class="memory-count" id="memory-count">0</span>
@@ -527,6 +581,20 @@
   </div>
 
   <audio id="audio"></audio>
+
+  <!-- Memory lightbox -->
+  <div id="lightbox" class="lightbox" hidden>
+    <div class="lightbox-backdrop" data-close></div>
+    <div class="lightbox-card">
+      <button class="lightbox-close" data-close>×</button>
+      <img class="lightbox-img" id="lightbox-img" alt="">
+      <div class="lightbox-meta">
+        <div class="lightbox-fact" id="lightbox-fact"></div>
+        <div class="lightbox-when" id="lightbox-when"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/recorder.js"></script>
   <script src="/static/app.js"></script>
 </body>
