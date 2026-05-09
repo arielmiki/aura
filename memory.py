@@ -34,6 +34,17 @@ class MemoryStore:
     def entries(self) -> list[dict]:
         return list(self._entries)
 
+    def update_fact(self, entry_id: str, new_fact: str) -> bool:
+        """Replace the fact text of an existing entry. Used by the async
+        caption task to enrich a memory after it's already been saved."""
+        for e in self._entries:
+            if e["id"] == entry_id:
+                e["fact"] = new_fact
+                self._save()
+                self._broadcast({"type": "memory_added", "entry": e})
+                return True
+        return False
+
     def remember(self, fact: str, image_jpeg: Optional[bytes] = None) -> Optional[str]:
         """Add a fact, optionally with a JPEG snapshot.
 

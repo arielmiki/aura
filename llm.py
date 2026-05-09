@@ -149,7 +149,7 @@ class Brain:
         if self._on_recall_visual is not None:
             tools.append(RECALL_VISUAL_TOOL)
 
-        for _ in range(4):
+        for _ in range(2):  # was 4; one remember/recall + one final reply is enough
             resp = await self._client.aio.models.generate_content(
                 model=LLM_MODEL,
                 contents=contents,

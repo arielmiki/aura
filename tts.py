@@ -16,7 +16,7 @@ from elevenlabs.client import ElevenLabs
 
 log = logging.getLogger(__name__)
 
-TTS_MODEL = "eleven_v3"
+TTS_MODEL = "eleven_flash_v2_5"  # fastest multilingual; lower latency than v3
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
 
 # A short list of high-frequency Indonesian function words. If any appear,

@@ -187,7 +187,7 @@ def make_app(memory: MemoryStore,
                 transcript=transcript,
                 image_jpeg=image_bytes,
                 memories=memory.facts(),
-                conversation=conversation.recent(10),
+                conversation=conversation.recent(5),  # was 10; faster prompt
                 patterns=patterns.render_for_prompt(),
                 adapted_knowledge=adapter.render_for_prompt(),
                 inline_recall=inline_recall,

@@ -313,10 +313,10 @@ class Adapter:
         except Exception:
             log.exception("adapt: download/cache failed")
 
-    def adapted_knowledge(self, max_rows: int = 8) -> list[dict]:
+    def adapted_knowledge(self, max_rows: int = 4) -> list[dict]:
         return list(self._adapted_rows[-max_rows:])
 
-    def render_for_prompt(self, max_rows: int = 8) -> str:
+    def render_for_prompt(self, max_rows: int = 4) -> str:
         rows = self.adapted_knowledge(max_rows)
         if not rows:
             return "(no adapted history yet)"

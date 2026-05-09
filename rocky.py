@@ -30,26 +30,32 @@ stt = STT()
 tts = TTS()
 prompt = Path("prompts/rocky_system.md").read_text()
 
+import asyncio
 import os
 from google import genai
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
 async def _on_remember(fact: str, image_jpeg=None):
-    """Save a fact, enriching it with a one-sentence visual description
-    of the moment it was learned. The image's pixels are stored on disk
-    AND its content gets baked into the fact text so memory recall works
-    even when the actual image isn't sent back to Gemini."""
-    enriched = fact
-    if image_jpeg:
-        try:
-            visual = await caption_image(gemini_client, image_jpeg)
-            if visual:
-                enriched = f"{fact.rstrip('.')} — {visual}"
-                logging.getLogger('rocky').info("caption: %s", visual)
-        except Exception:
-            logging.getLogger('rocky').exception("caption failed")
-    return memory.remember(enriched, image_jpeg=image_jpeg)
+    """Save the fact IMMEDIATELY so the chat loop isn't blocked. The
+    visual caption is computed in the background and merged into the
+    entry's fact text when ready (~5-6 s later) — by which time Rocky
+    has already finished replying."""
+    mid = memory.remember(fact, image_jpeg=image_jpeg)
+    if mid and image_jpeg:
+        asyncio.create_task(_enrich_with_caption(mid, fact, image_jpeg))
+    return mid
+
+
+async def _enrich_with_caption(mid: str, base_fact: str, image_jpeg: bytes):
+    """Background task: caption the image, append to the memory's fact."""
+    try:
+        visual = await caption_image(gemini_client, image_jpeg)
+        if visual:
+            memory.update_fact(mid, f"{base_fact.rstrip('.')} — {visual}")
+            logging.getLogger('rocky').info("caption(bg) %s: %s", mid, visual)
+    except Exception:
+        logging.getLogger('rocky').exception("caption(bg) failed")
 
 
 async def _on_recall_visual(query: str):
