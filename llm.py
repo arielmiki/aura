@@ -34,17 +34,73 @@ REMEMBER_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration(
 )])
 
 
+RECALL_VISUAL_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration(
+    name="recall_visual",
+    description=(
+        "Retrieve a past visual memory by topic. Use this when the user "
+        "asks about something they previously showed or told you "
+        "('did you see my dog?', 'what color was that mug?', 'remember "
+        "the book?'). The tool returns the most relevant remembered fact, "
+        "including a visual description of what was seen at that moment."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "query": types.Schema(
+                type=types.Type.STRING,
+                description=(
+                    "A short topic to recall, e.g. 'dog', 'mug', 'book', "
+                    "'Lily'. The tool will find the best matching memory."
+                ),
+            ),
+        },
+        required=["query"],
+    ),
+)])
+
+
+async def caption_image(client, image_jpeg: bytes) -> str:
+    """Ask Gemini Flash for a single-sentence visual description of an image.
+    Used to enrich remember() facts so the saved memory carries visual context
+    even after the actual image is forgotten."""
+    try:
+        resp = await client.aio.models.generate_content(
+            model=LLM_MODEL,
+            contents=[types.Content(role="user", parts=[
+                types.Part(text=(
+                    "In one short sentence, describe the visible scene "
+                    "in this image. Mention colors, prominent objects, "
+                    "and the human if visible. No preamble. Output ENGLISH."
+                )),
+                types.Part(inline_data=types.Blob(
+                    data=image_jpeg, mime_type="image/jpeg")),
+            ])],
+        )
+        return _extract_text(resp.candidates[0].content.parts).strip()
+    except Exception as e:
+        log.warning("caption_image failed: %s", e)
+        return ""
+
+
 class Brain:
     def __init__(self,
                  prompt_template: str,
                  on_remember: Callable[[str, Optional[bytes]], Awaitable[Optional[str]]],
+                 on_recall_visual: Optional[Callable[[str], Awaitable[Optional[dict]]]] = None,
                  api_key: Optional[str] = None) -> None:
         self._client = genai.Client(api_key=api_key or os.environ["GEMINI_API_KEY"])
         self._template = prompt_template
         self._on_remember = on_remember
+        self._on_recall_visual = on_recall_visual
         # Frame attached to the current turn — passed to remember() so the
         # memory keeps a snapshot of what was seen at that moment.
         self._current_image: Optional[bytes] = None
+
+    @property
+    def client(self):
+        """Expose the underlying genai client so callers (rocky.py's
+        on_remember closure) can request an image caption alongside saving."""
+        return self._client
 
     async def respond(self,
                       transcript: str,
@@ -80,13 +136,19 @@ class Brain:
         # Tool-call loop. The model may call remember() one or more times
         # before producing a final text reply. We cap at 4 iterations to
         # avoid infinite loops.
+        # Pick which tools are available this turn. Always include remember;
+        # include recall_visual only if rocky.py wired a callback for it.
+        tools = [REMEMBER_TOOL]
+        if self._on_recall_visual is not None:
+            tools.append(RECALL_VISUAL_TOOL)
+
         for _ in range(4):
             resp = await self._client.aio.models.generate_content(
                 model=LLM_MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=prompt,
-                    tools=[REMEMBER_TOOL],
+                    tools=tools,
                 ),
             )
             cand = resp.candidates[0]
@@ -114,6 +176,27 @@ class Brain:
                             response={"id": mid or "duplicate"},
                         ),
                     ))
+                elif fc.name == "recall_visual" and self._on_recall_visual:
+                    query = (fc.args or {}).get("query", "")
+                    result = await self._on_recall_visual(query)
+                    if result:
+                        tool_response_parts.append(types.Part(
+                            function_response=types.FunctionResponse(
+                                name="recall_visual",
+                                response={
+                                    "found": True,
+                                    "fact": result.get("fact", ""),
+                                    "saved_at": result.get("saved_at"),
+                                },
+                            ),
+                        ))
+                    else:
+                        tool_response_parts.append(types.Part(
+                            function_response=types.FunctionResponse(
+                                name="recall_visual",
+                                response={"found": False},
+                            ),
+                        ))
                 else:
                     tool_response_parts.append(types.Part(
                         function_response=types.FunctionResponse(

@@ -50,13 +50,15 @@ function setStatus(s) {
   } else {
     talkBtn.classList.remove('recording');
     if (s === 'ready' || s === 'idle') {
-      talkBtn.textContent = 'TALK';
+      talkBtn.textContent = mode === 'ptt' ? 'TALK' : 'AUTO (open mic)';
     } else {
       talkBtn.textContent = s.toUpperCase();
     }
   }
-  // Button is enabled in idle/ready/recording so the user can always click.
-  talkBtn.disabled = !(s === 'idle' || s === 'ready' || s === 'recording');
+  // TALK button is only interactive in push-to-talk mode. In open-mic mode
+  // the page auto-records on speech, so the button is purely informational.
+  const actionable = (s === 'idle' || s === 'ready' || s === 'recording');
+  talkBtn.disabled = !(actionable && mode === 'ptt');
   console.log('[rocky] state=', s);
 }
 
@@ -248,14 +250,20 @@ function setMode(m) {
   document.querySelectorAll('.mode-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === m);
   });
-  // Toggle a class on the controls panel so the threshold slider can
-  // dim/disable visually when push-to-talk is on.
+  // Toggle classes on the controls panel:
+  //   .ptt        — dims the threshold slider (auto-VAD off in PTT)
+  //   .open-mic   — dims the TALK button row (auto-records, no need)
   const lc = document.querySelector('.left-controls');
-  if (lc) lc.classList.toggle('ptt', m === 'ptt');
+  if (lc) {
+    lc.classList.toggle('ptt', m === 'ptt');
+    lc.classList.toggle('open-mic', m === 'open');
+  }
   // Reset VAD timers so a stale aboveSince doesn't immediately fire when
   // switching back to open-mic.
   aboveSince = 0;
   belowSince = 0;
+  // Refresh the TALK button enabled-state for the new mode.
+  setStatus(state);
   console.log('[rocky] mode=', m);
 }
 

@@ -543,6 +543,32 @@
   .memory.no-image { cursor: default; }
   .memory.no-image:active { transform: none; }
 
+  /* Talk button row inside left-controls — horizontal mic meter beside button */
+  .talk-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: stretch;
+    transition: opacity 0.2s;
+  }
+  /* In OPEN MIC mode, TALK is unnecessary; gray it out (still works as
+     manual override but visually dimmed) */
+  .left-controls.open-mic .talk-row { opacity: 0.4; }
+  .meter-h {
+    width: 14px; min-height: 100%;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .meter-h-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(0deg, var(--green), var(--amber) 70%, var(--magenta));
+    transition: height 0.05s;
+  }
+
   /* Left pane controls: mode toggle + threshold slider */
   .left-controls {
     display: flex; flex-direction: column; gap: 14px;
@@ -637,10 +663,16 @@
             <span>more sensitive</span><span>less sensitive</span>
           </div>
         </div>
+        <div class="talk-row">
+          <button id="talk-btn" disabled>TALK</button>
+          <div class="meter-h" title="mic level">
+            <div class="meter-h-fill" id="meter"></div>
+          </div>
+        </div>
       </div>
       <h2 style="padding: 0 4px">CONVERSATION</h2>
       <div class="transcript" id="transcript">
-        <div class="empty">Allow camera + microphone, click TALK, say hello.</div>
+        <div class="empty">Allow camera + microphone, then talk.</div>
       </div>
     </section>
 
@@ -651,11 +683,6 @@
           <video id="video" autoplay muted playsinline></video>
           <div class="cam-label">CAM</div>
         </div>
-      </div>
-
-      <div class="controls">
-        <button id="talk-btn" disabled>TALK</button>
-        <div class="meter" title="mic level"><div class="meter-fill" id="meter"></div></div>
       </div>
     </main>
 

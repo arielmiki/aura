@@ -70,6 +70,24 @@ class MemoryStore:
         p = self.image_dir / f"{entry_id}.jpg"
         return p if p.exists() else None
 
+    def recall(self, query: str) -> Optional[dict]:
+        """Find the entry whose fact best matches `query`. Cheap substring
+        scoring — the longest run of overlapping lowercase words wins.
+        Returns the full entry dict, or None if no decent match."""
+        if not query:
+            return None
+        q_words = {w for w in query.lower().split() if len(w) >= 3}
+        if not q_words:
+            return None
+        best, best_score = None, 0
+        for entry in self._entries:
+            fact_words = {w.strip(".,!?-—()'\"") for w in entry["fact"].lower().split()}
+            score = len(q_words & fact_words)
+            if score > best_score:
+                best_score = score
+                best = entry
+        return best if best_score > 0 else None
+
     def replace_all(self, new_entries: Iterable[dict]) -> None:
         """Used by background compaction to swap out the entire memory list."""
         self._entries = list(new_entries)
