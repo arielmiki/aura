@@ -3,7 +3,8 @@ __pycache__/
 .venv/
 .venv-mac/
 .env
-vocab.json
+memories.json
+conversation.json
 *.wav
 *.jpg
 docs/superpowers/specs/
