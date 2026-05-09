@@ -66,7 +66,17 @@ async function ensureMedia() {
   if (mediaStream) return true;
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
+      // Tighter audio constraints help Scribe transcribe accurately:
+      //   sampleRate=48k matches Opus's native rate
+      //   channelCount=1 is what STT expects
+      //   AGC normalizes voice level for consistent recognition
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 48000,
+        channelCount: 1,
+      },
       video: { width: { ideal: 640 }, height: { ideal: 480 } },
     });
   } catch (e) {
@@ -394,7 +404,11 @@ function startRecording() {
   console.log('[rocky] starting MediaRecorder with mime=', JSON.stringify(mime));
 
   try {
-    recorder = new MediaRecorder(audioOnly, mime ? { mimeType: mime } : undefined);
+    // Push the bitrate up — default is ~64 kbps which lossy-compresses
+    // away formant detail Scribe needs for accurate transcription.
+    const opts = { audioBitsPerSecond: 128000 };
+    if (mime) opts.mimeType = mime;
+    recorder = new MediaRecorder(audioOnly, opts);
   } catch (e) {
     console.error('[rocky] MediaRecorder construct failed', e);
     setStatus('ready');
