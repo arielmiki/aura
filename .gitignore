@@ -4,6 +4,7 @@ __pycache__/
 .venv-mac/
 .env
 memories.json
+memories_images/
 conversation.json
 *.wav
 *.jpg

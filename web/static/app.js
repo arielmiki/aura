@@ -18,7 +18,18 @@ function renderMemories(entries, justAddedId) {
   for (const e of [...entries].reverse()) {
     const div = document.createElement('div');
     div.className = 'memory' + (e.id === justAddedId ? ' new' : '');
-    div.textContent = e.fact;
+    if (e.has_image) {
+      const img = document.createElement('img');
+      img.className = 'memory-thumb';
+      img.src = '/memory/image/' + e.id;
+      img.alt = '';
+      img.loading = 'lazy';
+      div.appendChild(img);
+    }
+    const fact = document.createElement('div');
+    fact.className = 'memory-fact';
+    fact.textContent = e.fact;
+    div.appendChild(fact);
     memoriesEl.appendChild(div);
   }
 }

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from llm import Brain
@@ -45,6 +45,16 @@ def make_app(memory: MemoryStore,
     @app.get("/api/memories")
     async def api_memories():
         return {"entries": memory.entries()}
+
+    @app.get("/memory/image/{entry_id}")
+    async def memory_image(entry_id: str):
+        # Strict id format guard — entry ids are 8-char uuid hex prefixes.
+        if not entry_id.isalnum() or len(entry_id) > 32:
+            return Response(status_code=404)
+        p = memory.image_path(entry_id)
+        if not p:
+            return Response(status_code=404)
+        return FileResponse(p, media_type="image/jpeg")
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):

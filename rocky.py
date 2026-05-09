@@ -26,8 +26,8 @@ stt = STT()
 tts = TTS()
 prompt = Path("prompts/rocky_system.md").read_text()
 
-async def _on_remember(fact: str):
-    return memory.remember(fact)
+async def _on_remember(fact: str, image_jpeg=None):
+    return memory.remember(fact, image_jpeg=image_jpeg)
 
 brain = Brain(prompt, on_remember=_on_remember)
 

@@ -37,11 +37,14 @@ REMEMBER_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration(
 class Brain:
     def __init__(self,
                  prompt_template: str,
-                 on_remember: Callable[[str], Awaitable[Optional[str]]],
+                 on_remember: Callable[[str, Optional[bytes]], Awaitable[Optional[str]]],
                  api_key: Optional[str] = None) -> None:
         self._client = genai.Client(api_key=api_key or os.environ["GEMINI_API_KEY"])
         self._template = prompt_template
         self._on_remember = on_remember
+        # Frame attached to the current turn — passed to remember() so the
+        # memory keeps a snapshot of what was seen at that moment.
+        self._current_image: Optional[bytes] = None
 
     async def respond(self,
                       transcript: str,
@@ -53,6 +56,7 @@ class Brain:
         memories: list of fact strings, most recent last.
         conversation: list of {user, assistant, ts} dicts.
         """
+        self._current_image = image_jpeg
         prompt = self._template.format(
             memories="\n".join(f"- {m}" for m in memories) or "(none yet)",
             conversation=_format_conversation(conversation),
@@ -97,7 +101,7 @@ class Brain:
                 fc = p.function_call
                 if fc.name == "remember":
                     fact = (fc.args or {}).get("fact", "")
-                    mid = await self._on_remember(fact)
+                    mid = await self._on_remember(fact, self._current_image)
                     tool_response_parts.append(types.Part(
                         function_response=types.FunctionResponse(
                             name="remember",

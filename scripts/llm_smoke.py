@@ -13,8 +13,9 @@ from dotenv import load_dotenv  # noqa: E402
 from llm import Brain  # noqa: E402
 
 
-async def fake_remember(fact: str) -> str:
-    print(f"  -> remember({fact!r})")
+async def fake_remember(fact: str, image_jpeg=None) -> str:
+    img_note = f" + {len(image_jpeg)} byte image" if image_jpeg else ""
+    print(f"  -> remember({fact!r}{img_note})")
     return "fakeid"
 
 

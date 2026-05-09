@@ -330,8 +330,18 @@
     font-size: 12px;
     line-height: 1.4;
     transition: all 0.2s;
+    display: flex; gap: 10px; align-items: flex-start;
   }
   .memory:hover { border-color: rgba(90,216,255,0.3); }
+  .memory-thumb {
+    width: 44px; height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid rgba(120,200,255,0.2);
+    flex-shrink: 0;
+    background: #1a1a1d;
+  }
+  .memory-fact { flex: 1; min-width: 0; }
   .memory.new {
     background: linear-gradient(90deg, rgba(95,255,177,0.18), rgba(90,216,255,0.1));
     border-color: rgba(95,255,177,0.5);

@@ -68,6 +68,29 @@ def test_replace_all_swaps_contents(store: MemoryStore):
     assert store.facts() == ["c"]
 
 
+def test_remember_with_image_persists_jpeg(tmp_path):
+    store = MemoryStore(path=tmp_path / "memories.json")
+    fake_jpeg = b"\xff\xd8\xff\xe0fakejpegdata\xff\xd9"
+    mid = store.remember("User has a corgi named Lily", image_jpeg=fake_jpeg)
+    assert mid is not None
+    p = store.image_path(mid)
+    assert p is not None and p.exists()
+    assert p.read_bytes() == fake_jpeg
+
+
+def test_remember_without_image_has_no_path(tmp_path):
+    store = MemoryStore(path=tmp_path / "memories.json")
+    mid = store.remember("User likes coffee")
+    assert mid is not None
+    assert store.image_path(mid) is None
+
+
+def test_remember_with_image_marks_entry(tmp_path):
+    store = MemoryStore(path=tmp_path / "memories.json")
+    store.remember("User likes coffee", image_jpeg=b"\xff\xd8\xff")
+    assert store.entries()[-1]["has_image"] is True
+
+
 @pytest.mark.asyncio
 async def test_subscribe_receives_memory_added(store: MemoryStore):
     queue = await store.subscribe()
