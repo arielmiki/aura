@@ -23,11 +23,14 @@ let recordedChunks = [];
 let analyser = null;
 let dataArray = null;
 let belowSince = 0;
+let aboveSince = 0;
 let recordingStart = 0;
 
-const SILENCE_AUTO_SUBMIT_MS = 1200;
-const MIN_RECORDING_MS = 400;
-const SPEECH_THRESHOLD = 0.015;
+const SILENCE_AUTO_SUBMIT_MS = 1000;  // stop after 1s of quiet
+const SPEECH_START_MS = 250;          // start after 250ms of sound
+const MIN_RECORDING_MS = 500;
+const SPEECH_THRESHOLD = 0.02;        // RMS threshold; raised slightly so
+                                      // ambient noise doesn't auto-trigger
 const METER_INTERVAL_MS = 50;
 
 function setStatus(s) {
@@ -103,9 +106,20 @@ function meterTick() {
   const pct = Math.min(100, Math.round(level * 500));
   meterEl.style.height = pct + '%';
 
-  // Auto-submit on sustained silence while recording
-  if (state === 'recording') {
-    const now = performance.now();
+  const now = performance.now();
+
+  if (state === 'ready') {
+    // Auto-start recording when the user starts talking.
+    if (level > SPEECH_THRESHOLD) {
+      aboveSince ||= now;
+      if (now - aboveSince > SPEECH_START_MS) {
+        startRecording();
+      }
+    } else {
+      aboveSince = 0;
+    }
+  } else if (state === 'recording') {
+    // Auto-submit on sustained silence.
     if (level < SPEECH_THRESHOLD) {
       belowSince ||= now;
       if (now - belowSince > SILENCE_AUTO_SUBMIT_MS &&
@@ -116,6 +130,8 @@ function meterTick() {
       belowSince = 0;
     }
   }
+  // While speaking/thinking/submitting we deliberately don't VAD —
+  // Rocky's own voice through the speaker would self-trigger.
 }
 
 async function onTalkClick() {
@@ -189,6 +205,7 @@ function startRecording() {
   }
   recordingStart = performance.now();
   belowSince = 0;
+  aboveSince = 0;
   setStatus('recording');
 }
 
