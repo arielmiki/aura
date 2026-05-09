@@ -169,6 +169,7 @@ def make_app(memory: MemoryStore,
                 memories=memory.facts(),
                 conversation=conversation.recent(10),
                 patterns=patterns.render_for_prompt(),
+                adapted_knowledge=adapter.render_for_prompt(),
             )
         except Exception:
             log.exception("Brain failed")

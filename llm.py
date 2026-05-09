@@ -51,18 +51,21 @@ class Brain:
                       image_jpeg: Optional[bytes],
                       memories: list[str],
                       conversation: list[dict],
-                      patterns: str = "") -> str:
+                      patterns: str = "",
+                      adapted_knowledge: str = "") -> str:
         """One conversational turn. Returns Rocky's reply text.
 
         memories: list of fact strings, most recent last.
         conversation: list of {user, assistant, ts} dicts.
         patterns: rendered USER PATTERNS block (adaptive style hints).
+        adapted_knowledge: rendered ADAPTED KNOWLEDGE block from Adaption Labs.
         """
         self._current_image = image_jpeg
         prompt = self._template.format(
             memories="\n".join(f"- {m}" for m in memories) or "(none yet)",
             conversation=_format_conversation(conversation),
             patterns=patterns or "(none yet)",
+            adapted_knowledge=adapted_knowledge or "(none yet)",
         )
 
         # Build the user turn: text + optional image

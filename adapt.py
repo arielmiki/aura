@@ -1,19 +1,21 @@
-"""Adaption Labs integration.
+"""Adaption Labs integration with feedback loop.
 
 Treats Rocky's conversation log as a growing personal training corpus. We
 periodically (or on demand) export it as a CSV of {prompt, completion}
 rows, upload to Adaption, and start an adaptation run with the Rocky
-persona prompt as the `blueprint`. Adaption returns a quality-checked,
-fine-tuning-ready dataset that future Rocky models can train on.
+persona prompt as the `blueprint`. When the run completes, we download
+the adapted dataset and feed its cleaned (prompt, completion) rows back
+into Rocky's system prompt as [ADAPTED KNOWLEDGE] — a long-term memory
+layer Rocky can recall from.
 
-The integration is best-effort: failures don't break the chat path. The
-`Adapter` reports a small state dict the UI subscribes to.
+The integration is best-effort: failures don't break the chat path.
 """
 from __future__ import annotations
 
 import asyncio
 import csv
 import io
+import json
 import logging
 import os
 import time
@@ -34,12 +36,20 @@ class Adapter:
     def __init__(self,
                  blueprint_path: Path,
                  csv_path: Path = Path("/tmp/rocky_corpus.csv"),
+                 cache_path: Path = Path("adapted_knowledge.json"),
                  api_key: Optional[str] = None) -> None:
         self.blueprint_path = Path(blueprint_path)
         self.csv_path = Path(csv_path)
+        self.cache_path = Path(cache_path)
         self._api_key = api_key or os.environ.get("ADAPTION_API_KEY")
         self._client = None  # built lazily so the app boots without the key
         self._subscribers: list[asyncio.Queue] = []
+        self._adapted_rows: list[dict] = []  # cached adapted (prompt, completion) pairs
+        if self.cache_path.exists():
+            try:
+                self._adapted_rows = json.loads(self.cache_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
         self._state: dict = {
             "status": "idle",   # idle | uploading | running | completed | failed
             "row_count": 0,
@@ -48,6 +58,7 @@ class Adapter:
             "updated_at": None,
             "error": None,
             "configured": bool(self._api_key),
+            "adapted_count": len(self._adapted_rows),
         }
 
     @property
@@ -195,9 +206,54 @@ class Adapter:
             self._state.update({"status": normalized, "updated_at": time.time()})
             if normalized != old:
                 self._broadcast()
+            # When a run flips to completed, download + cache the adapted rows
+            # so they can flow back into Rocky's prompt as long-term knowledge.
+            if normalized == "completed" and old != "completed":
+                asyncio.create_task(self._download_and_cache(self._state["dataset_id"]))
         except Exception as e:
             log.exception("adapt: status fetch failed")
             self._state.update({"error": f"{type(e).__name__}: {e}",
                                 "updated_at": time.time()})
             self._broadcast()
         return self.state()
+
+    async def _download_and_cache(self, dataset_id: str) -> None:
+        """Download the adapted CSV and cache (prompt, completion) rows."""
+        try:
+            client = self._client_or_raise()
+            url = await asyncio.to_thread(
+                client.datasets.download, dataset_id, file_format="csv",
+            )
+            # The SDK returns a presigned URL string we have to fetch.
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=30) as r:
+                body = r.read().decode("utf-8", errors="replace")
+            reader = csv.DictReader(io.StringIO(body))
+            rows = []
+            for r in reader:
+                p = (r.get("prompt") or "").strip()
+                c = (r.get("completion") or "").strip()
+                if p and c:
+                    rows.append({"prompt": p, "completion": c})
+            self._adapted_rows = rows
+            self.cache_path.write_text(json.dumps(rows, indent=2))
+            self._state["adapted_count"] = len(rows)
+            log.info("adapt: cached %d adapted rows from dataset %s",
+                     len(rows), dataset_id)
+            self._broadcast()
+        except Exception:
+            log.exception("adapt: download/cache failed")
+
+    def adapted_knowledge(self, max_rows: int = 8) -> list[dict]:
+        """Return the most recent adapted rows for prompt injection."""
+        return list(self._adapted_rows[-max_rows:])
+
+    def render_for_prompt(self, max_rows: int = 8) -> str:
+        """Format adapted rows as a [ADAPTED KNOWLEDGE] block for the LLM."""
+        rows = self.adapted_knowledge(max_rows)
+        if not rows:
+            return "(no adapted history yet)"
+        return "\n".join(
+            f"- Past: \"{r['prompt']}\" -> \"{r['completion']}\""
+            for r in rows
+        )
