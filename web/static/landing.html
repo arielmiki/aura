@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aura — every presence has a personality</title>
+<meta name="description" content="Aura is an AI companion that sees, hears, and remembers. Pick a personality, talk naturally, and watch them adapt to you over time.">
+<link rel="preconnect" href="https://rsms.me/">
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<style>
+  /* =================== AURORA DESIGN SYSTEM ===================
+     Warm dark companion palette. Lavender + cyan brand gradient,
+     per-character accents (amber for Rocky, rose for Hana), restrained
+     neutrals. 8pt grid, modular type scale.
+  */
+  :root {
+    color-scheme: dark;
+
+    /* Surfaces — all warm-purple-leaning, not cold blue */
+    --bg-deep:   #0a0816;
+    --bg-mid:    #110b22;
+    --bg-raised: #1a1330;
+    --panel:     rgba(35, 24, 54, 0.55);
+    --border:    rgba(168, 155, 255, 0.16);
+    --border-strong: rgba(168, 155, 255, 0.38);
+
+    /* Brand gradient (used as a wash, not solid colors) */
+    --primary:   #a89bff;     /* lavender */
+    --primary-2: #62d4ff;     /* cyan      */
+    --primary-3: #ff85c1;     /* warm rose */
+
+    /* Per-character accents — connected to personality */
+    --rocky:     #ff9b66;     /* earth amber */
+    --rocky-2:   #ffd29c;
+    --hana:      #ff85c1;     /* warm rose */
+    --hana-2:    #ffc4dd;
+
+    /* States */
+    --success:   #7be8a4;
+    --warning:   #ffb96a;
+
+    /* Text */
+    --text:      #f5f0fa;
+    --text-soft: #b6acc9;
+    --muted:     #6e668a;
+
+    /* Type */
+    --font-display: 'Inter Display', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-body:    'Inter', system-ui, sans-serif;
+    --font-mono:    'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+
+    /* Modular scale (1.25) */
+    --t-xs: 11px;  --t-sm: 13px;  --t-md: 16px;  --t-lg: 20px;
+    --t-xl: 28px;  --t-2xl: 40px; --t-3xl: 64px; --t-4xl: 96px;
+
+    /* Spacing — 8pt grid */
+    --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;  --s-5: 24px;
+    --s-6: 32px; --s-7: 48px; --s-8: 64px;  --s-9: 96px;  --s-10: 128px;
+
+    /* Radii */
+    --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px; --r-pill: 999px;
+  }
+
+  /* font-feature-settings opens up Inter's nicer alternates */
+  body {
+    font-feature-settings: "ss01", "cv11", "calt";
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--bg-deep);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  /* ============ LIVING BACKGROUND ============
+     Three large aurora blobs that drift slowly. No neon "cyber"
+     vibe — these are softer, warmer, more dreamlike.
+  */
+  body::before {
+    content: '';
+    position: fixed; inset: -10%;
+    z-index: -2;
+    background:
+      radial-gradient(900px 600px at 12% 18%, rgba(168,155,255,0.22), transparent 60%),
+      radial-gradient(700px 700px at 88% 28%, rgba(255,133,193,0.16), transparent 60%),
+      radial-gradient(800px 800px at 50% 95%, rgba(98,212,255,0.14), transparent 65%);
+    animation: drift 28s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    from { transform: translate3d(0,0,0) scale(1); }
+    to   { transform: translate3d(-2%, 2%, 0) scale(1.04); }
+  }
+  /* fine grain noise to kill banding on gradients */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+  }
+
+  /* ============ LAYOUT ============ */
+  .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 var(--s-5); }
+  section { padding: var(--s-9) 0; }
+
+  /* ============ NAV ============ */
+  nav {
+    position: fixed; inset: 0 0 auto 0; z-index: 100;
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    background: rgba(10, 8, 22, 0.55);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--s-3) var(--s-5);
+    max-width: 1200px; margin: 0 auto;
+  }
+  .wordmark {
+    font-family: var(--font-mono);
+    font-weight: 700; font-size: var(--t-sm);
+    letter-spacing: 0.32em;
+    background: linear-gradient(96deg, var(--primary), var(--primary-2) 60%, var(--primary-3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .nav-links { display: flex; gap: var(--s-5); align-items: center; }
+  .nav-link {
+    font-family: var(--font-mono); font-size: var(--t-xs);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-soft); text-decoration: none;
+    transition: color 0.18s;
+  }
+  .nav-link:hover { color: var(--primary); }
+
+  /* ============ BUTTONS ============ */
+  .btn {
+    display: inline-flex; align-items: center; gap: var(--s-2);
+    padding: 11px 20px;
+    background: linear-gradient(110deg,
+      rgba(168,155,255,0.18),
+      rgba(98,212,255,0.18) 50%,
+      rgba(255,133,193,0.15));
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-pill);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.22em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.18s, box-shadow 0.18s, background 0.18s;
+    box-shadow: 0 0 32px rgba(168,155,255,0.18);
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 40px rgba(168,155,255,0.30);
+    background: linear-gradient(110deg,
+      rgba(168,155,255,0.32),
+      rgba(98,212,255,0.28) 50%,
+      rgba(255,133,193,0.24));
+  }
+  .btn-large { padding: 18px 36px; font-size: var(--t-sm); letter-spacing: 0.28em; }
+  .btn-arrow::after { content: '→'; transition: transform 0.18s; font-weight: 400; }
+  .btn-arrow:hover::after { transform: translateX(4px); }
+
+  /* ============ HERO ============ */
+  .hero {
+    min-height: 100vh;
+    padding: 140px 0 var(--s-8);
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative;
+  }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: var(--s-2);
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--primary);
+    margin-bottom: var(--s-4);
+  }
+  .eyebrow .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 12px var(--primary);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.78); } }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 8vw, var(--t-4xl));
+    line-height: 0.96; letter-spacing: -0.03em; font-weight: 700;
+    margin: 0 0 var(--s-5);
+    background: linear-gradient(180deg, #fff 0%, #c8bdda 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero h1 .accent {
+    background: linear-gradient(96deg, var(--primary), var(--primary-2) 55%, var(--primary-3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero-sub {
+    font-size: clamp(17px, 1.5vw, 21px);
+    color: var(--text-soft);
+    max-width: 620px;
+    margin: 0 0 var(--s-7);
+  }
+  .hero-cta { display: flex; gap: var(--s-4); flex-wrap: wrap; align-items: center; }
+  .hero-meta {
+    margin-top: var(--s-7);
+    display: flex; gap: var(--s-7); flex-wrap: wrap;
+    color: var(--muted); font-size: var(--t-sm);
+    font-family: var(--font-mono);
+  }
+  .hero-meta strong { color: var(--text); font-weight: 600; }
+
+  /* Floating aurora orb (visual anchor on the right) */
+  .hero-orb {
+    position: absolute; right: -120px; top: 14%;
+    width: 540px; height: 540px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), transparent 40%),
+      radial-gradient(circle at 70% 70%, rgba(255,133,193,0.30), transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(168,155,255,0.45), transparent 70%);
+    filter: blur(24px);
+    animation: orb-float 9s ease-in-out infinite;
+    z-index: -1;
+    opacity: 0.85;
+  }
+  @keyframes orb-float {
+    0%,100% { transform: translate(0,0) scale(1); }
+    50%     { transform: translate(-30px, 24px) scale(1.06); }
+  }
+
+  /* ============ SECTION HEADINGS ============ */
+  .section-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--primary-3); margin-bottom: var(--s-3);
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 4.5vw, 60px);
+    line-height: 1.04; letter-spacing: -0.025em; font-weight: 700;
+    margin: 0 0 var(--s-5); max-width: 760px;
+  }
+  .section-sub {
+    color: var(--text-soft); font-size: var(--t-lg); max-width: 640px;
+    margin: 0 0 var(--s-7);
+  }
+
+  /* ============ CHARACTER CARDS ============ */
+  .char-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: var(--s-5);
+  }
+  .char-card {
+    position: relative;
+    padding: var(--s-7) var(--s-6);
+    border-radius: var(--r-xl);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+    transition: transform 0.35s cubic-bezier(.5,1.6,.4,1), border-color 0.3s, box-shadow 0.3s;
+  }
+  .char-card:hover {
+    transform: translateY(-6px);
+    border-color: var(--border-strong);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+  }
+  .char-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--card-glow, transparent);
+    pointer-events: none;
+  }
+  .char-card[data-character="rocky"] {
+    --card-glow: radial-gradient(circle at 25% 15%, rgba(255,155,102,0.18), transparent 60%);
+  }
+  .char-card[data-character="hana"] {
+    --card-glow: radial-gradient(circle at 75% 20%, rgba(255,133,193,0.20), transparent 60%);
+  }
+  .char-tag {
+    display: inline-block; font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.3em; text-transform: uppercase;
+    padding: 4px 12px; border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    margin-bottom: var(--s-4);
+  }
+  .char-card[data-character="rocky"] .char-tag {
+    color: var(--rocky); border-color: rgba(255,155,102,0.4);
+  }
+  .char-card[data-character="hana"] .char-tag {
+    color: var(--hana); border-color: rgba(255,133,193,0.4);
+  }
+  .char-name {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 6vw, 72px);
+    font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+    margin: 0 0 var(--s-4);
+  }
+  .char-card[data-character="rocky"] .char-name {
+    background: linear-gradient(120deg, var(--rocky-2), var(--rocky));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .char-card[data-character="hana"] .char-name {
+    background: linear-gradient(120deg, var(--hana-2), var(--hana));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .char-line { color: var(--text-soft); margin: 0 0 var(--s-5); font-size: var(--t-md); }
+  .char-quote {
+    font-family: var(--font-mono);
+    color: var(--text); font-size: var(--t-sm);
+    padding: var(--s-3) var(--s-4);
+    border-left: 2px solid currentColor;
+    background: rgba(255,255,255,0.025);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+  .char-card[data-character="rocky"] .char-quote { color: var(--rocky); }
+  .char-card[data-character="hana"]  .char-quote { color: var(--hana); }
+  .char-card .char-quote span { color: var(--text); }
+
+  /* ============ FEATURE GRID ============ */
+  .feat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--s-5);
+  }
+  .feat {
+    padding: var(--s-5) var(--s-5) var(--s-6);
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: border-color 0.2s, transform 0.25s;
+  }
+  .feat:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-3px);
+  }
+  .feat-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: var(--r-md);
+    margin-bottom: var(--s-4);
+    background: linear-gradient(135deg, rgba(168,155,255,0.18), rgba(98,212,255,0.14));
+    border: 1px solid var(--border);
+  }
+  .feat-icon svg { width: 22px; height: 22px; color: var(--primary); }
+  .feat-title {
+    font-family: var(--font-display);
+    font-size: var(--t-lg); font-weight: 700; margin: 0 0 var(--s-2);
+    letter-spacing: -0.005em;
+  }
+  .feat-body { color: var(--text-soft); font-size: var(--t-sm); margin: 0; }
+
+  /* ============ TECH STACK ============ */
+  .stack-eyebrow {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: var(--s-5);
+  }
+  .stack-row {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: var(--s-4); align-items: center;
+  }
+  .stack-pill {
+    display: inline-flex; align-items: center; gap: var(--s-2);
+    padding: 14px 22px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.04em;
+    background: var(--panel);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--text-soft);
+  }
+  .stack-pill .role {
+    font-size: var(--t-xs); letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); padding-left: 10px; margin-left: 6px;
+    border-left: 1px solid var(--border);
+  }
+  .stack-pill[data-vendor="gemini"]   { color: var(--primary-2); }
+  .stack-pill[data-vendor="eleven"]   { color: var(--primary-3); }
+  .stack-pill[data-vendor="adaption"] { color: var(--success); }
+
+  /* ============ FINAL CTA ============ */
+  .final-cta {
+    padding: var(--s-10) var(--s-5);
+    text-align: center;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, transparent, rgba(168,155,255,0.06), transparent);
+  }
+  .final-cta h2 {
+    font-family: var(--font-display);
+    font-size: clamp(40px, 6vw, 84px);
+    line-height: 1; letter-spacing: -0.025em; font-weight: 700;
+    margin: 0 0 var(--s-5);
+    background: linear-gradient(96deg, #fff, var(--primary), var(--primary-3));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .final-cta p { color: var(--text-soft); font-size: var(--t-lg); margin: 0 0 var(--s-7); }
+
+  /* ============ FOOTER ============ */
+  footer {
+    padding: var(--s-7) var(--s-5);
+    text-align: center;
+    color: var(--muted);
+    font-family: var(--font-mono); font-size: var(--t-xs);
+    letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  footer a { color: var(--text-soft); text-decoration: none; margin: 0 var(--s-3); }
+  footer a:hover { color: var(--primary); }
+
+  /* ============ ENTRY ANIMATIONS ============ */
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.75s cubic-bezier(.4,.6,.2,1), transform 0.75s cubic-bezier(.4,.6,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 720px) {
+    .hero { padding-top: 110px; }
+    .hero-orb { display: none; }
+    .nav-link { display: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <div class="wordmark">AURA</div>
+      <div class="nav-links">
+        <a href="#characters" class="nav-link">Characters</a>
+        <a href="#features"   class="nav-link">Features</a>
+        <a href="#stack"      class="nav-link">Tech</a>
+        <a href="/app" class="btn">Launch App</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-orb" aria-hidden="true"></div>
+    <div class="container">
+      <div class="eyebrow reveal"><span class="dot"></span> AI Presence · live demo</div>
+      <h1 class="reveal">
+        Every presence,<br>
+        <span class="accent">a personality.</span>
+      </h1>
+      <p class="hero-sub reveal">
+        Aura is an always-on AI companion who sees what you see, hears how you say it, and remembers the things that matter. Pick a personality, talk naturally, and watch them grow into someone who knows you.
+      </p>
+      <div class="hero-cta reveal">
+        <a href="/app" class="btn btn-large btn-arrow">Launch Aura</a>
+        <a href="#characters" class="nav-link" style="font-size: 12px;">Meet the auras</a>
+      </div>
+      <div class="hero-meta reveal">
+        <div><strong>2</strong> personalities</div>
+        <div><strong>3</strong> memory layers</div>
+        <div><strong>74</strong> languages understood</div>
+        <div><strong>~5s</strong> per turn</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- CHARACTERS -->
+  <section id="characters">
+    <div class="container">
+      <div class="section-eyebrow reveal">The auras</div>
+      <h2 class="section-title reveal">Two personalities. One companion.</h2>
+      <p class="section-sub reveal">
+        Each aura has its own voice, mannerisms, and way of speaking. Switch anytime — your memory and history follow you.
+      </p>
+
+      <div class="char-grid">
+        <div class="char-card reveal" data-character="rocky">
+          <span class="char-tag">Alien · Project Hail Mary</span>
+          <h3 class="char-name">Rocky</h3>
+          <p class="char-line">Curious, devoted, talks in fragmented English. Cloned voice. Punches like "Amaze!" and "Question?" out loud the way a real friend would.</p>
+          <div class="char-quote"><span>"Amaze! Steven, friend. Lily corgi. Question?"</span></div>
+        </div>
+
+        <div class="char-card reveal" data-character="hana">
+          <span class="char-tag">Anime · Cute & energetic</span>
+          <h3 class="char-name">Hana</h3>
+          <p class="char-line">Warm, dramatic, expressive. Plain-English replies in a bright cute-anime voice. Will hype you up when you win and listen when you don't.</p>
+          <div class="char-quote"><span>"Yay, Steven! That's amazing! Tell me more!"</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="container">
+      <div class="section-eyebrow reveal">What makes it work</div>
+      <h2 class="section-title reveal">Adaptive memory. Real senses. Real personality.</h2>
+      <p class="section-sub reveal">
+        Aura isn't a chatbot in a textbox. It hears, sees, and remembers — and quietly refines itself to match how you actually like to talk.
+      </p>
+
+      <div class="feat-grid">
+        <div class="feat reveal">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h3 class="feat-title">Visual memory</h3>
+          <p class="feat-body">Every saved fact captures the camera frame at that moment. Ask later — it recalls what it saw.</p>
+        </div>
+
+        <div class="feat reveal">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
+          <h3 class="feat-title">Always-on voice</h3>
+          <p class="feat-body">Open mic with sensitivity control, or push-to-talk for noisy rooms. Real-time response in your character's voice.</p>
+        </div>
+
+        <div class="feat reveal">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11h6"/><path d="M9 15h6"/><path d="M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><path d="M12 3v4"/></svg></div>
+          <h3 class="feat-title">Adaptive style</h3>
+          <p class="feat-body">"Shorter please" — and it's shorter. Reply length, tone, and topics tune to you over time.</p>
+        </div>
+
+        <div class="feat reveal">
+          <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6a6 6 0 0 0 0 12"/><path d="M12 12c2 1 4 3 4 6"/><path d="M12 12c-2-1-4-3-4-6"/></svg></div>
+          <h3 class="feat-title">Long-term knowledge</h3>
+          <p class="feat-body">Conversations are continuously cleaned and adapted into a personalized training corpus. Your aura gets smarter about you, not just busier.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section id="stack">
+    <div class="container">
+      <div class="stack-eyebrow reveal">Powered by</div>
+      <div class="stack-row">
+        <div class="stack-pill reveal" data-vendor="gemini">
+          Gemini 2.5 Flash<span class="role">brain</span>
+        </div>
+        <div class="stack-pill reveal" data-vendor="eleven">
+          ElevenLabs Scribe + v3<span class="role">voice</span>
+        </div>
+        <div class="stack-pill reveal" data-vendor="adaption">
+          Adaption Labs<span class="role">adaptation</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final-cta">
+    <div class="container">
+      <h2 class="reveal">Ready to meet them?</h2>
+      <p class="reveal">Allow camera + microphone, pick a personality, and start talking.</p>
+      <a href="/app" class="btn btn-large btn-arrow reveal">Launch Aura</a>
+    </div>
+  </section>
+
+  <footer>
+    <div>Aura · Built at AI Engineer Singapore Hackathon · 2026</div>
+  </footer>
+
+  <script>
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      }
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+  </script>
+</body>
+</html>

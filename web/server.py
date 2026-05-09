@@ -1,7 +1,8 @@
 """FastAPI app for Rocky personal assistant.
 
 Endpoints:
-  GET  /              -> static page (web/static/index.html)
+  GET  /              -> landing page (web/static/landing.html)
+  GET  /app           -> companion app (web/static/index.html)
   POST /turn          -> multipart audio + image -> mp3 stream
   GET  /api/memories  -> current memories
   WS   /ws            -> push memory_added / memory_compacted events
@@ -44,6 +45,10 @@ def make_app(memory: MemoryStore,
 
     @app.get("/")
     async def root():
+        return FileResponse(STATIC / "landing.html")
+
+    @app.get("/app")
+    async def app_page():
         return FileResponse(STATIC / "index.html")
 
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
@@ -51,6 +56,12 @@ def make_app(memory: MemoryStore,
     @app.get("/api/memories")
     async def api_memories():
         return {"entries": memory.entries()}
+
+    @app.get("/api/conversation")
+    async def api_conversation():
+        # Persisted rolling window — the UI rehydrates the transcript on
+        # page load so reloads don't lose context.
+        return {"turns": conversation.turns()}
 
     @app.get("/api/characters")
     async def api_characters():

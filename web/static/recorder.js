@@ -266,8 +266,8 @@ function setMode(m) {
   });
   // Toggle classes on the controls panel:
   //   .ptt        — dims the threshold slider (auto-VAD off in PTT)
-  //   .open-mic   — dims the TALK button row (auto-records, no need)
-  const lc = document.querySelector('.left-controls');
+  //   .open-mic   — dims the TALK button (auto-records, no need)
+  const lc = document.getElementById('control-bar');
   if (lc) {
     lc.classList.toggle('ptt', m === 'ptt');
     lc.classList.toggle('open-mic', m === 'open');

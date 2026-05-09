@@ -2,20 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Companion</title>
+<title>Aura</title>
+<!-- Lucide icons (open-source) — clean, consistent line icons. -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <style>
   :root {
     color-scheme: dark;
-    --bg: #06070d;
-    --bg-grad: radial-gradient(ellipse at top, #0d1421 0%, #06070d 60%);
-    --panel: rgba(20, 28, 48, 0.5);
-    --panel-border: rgba(120, 200, 255, 0.18);
-    --cyan: #5ad8ff;
-    --magenta: #ff5ad8;
-    --amber: #ffc15a;
-    --green: #5fffb1;
-    --text: #e8eef7;
-    --muted: #6c7a96;
+    /* Aurora palette — warm dark companion vibe.
+       --cyan/magenta/amber/green tokens are kept (hundreds of references)
+       but their values shift toward warmer, more inviting hues. */
+    --bg: #0a0816;
+    --bg-grad: radial-gradient(ellipse at top, #1a1230 0%, #0a0816 60%);
+    --panel: rgba(35, 24, 54, 0.55);
+    --panel-border: rgba(168, 155, 255, 0.18);
+    --primary: #a89bff;        /* lavender — new brand accent */
+    --cyan: #62d4ff;           /* slightly warmer cyan          */
+    --magenta: #ff85c1;        /* warm rose, not neon magenta   */
+    --amber: #ff9b66;          /* earth amber — Rocky character */
+    --green: #7be8a4;          /* softer success green          */
+    --text: #f5f0fa;
+    --muted: #6e668a;
   }
 
   * { box-sizing: border-box; }
@@ -42,35 +48,26 @@
     z-index: 1000;
   }
 
-  /* Layout: 3 columns + header. Transcript on the left gets a full
-     viewport-height column so chat history has room to breathe. */
+  /* Layout: fullscreen sphere stage with a floating top bar and a
+     floating bottom controls bar. Subtitle caption overlays the stage.
+     Conversation history + adapted + memories live in a slide-in drawer. */
   .app {
-    display: grid;
-    grid-template-columns: 340px 1fr 320px;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      "topbar topbar topbar"
-      "convo  stage  memo";
-    gap: 16px;
-    padding: 20px;
+    position: relative;
     height: 100vh;
     min-height: 0;
   }
-  .topbar           { grid-area: topbar; }
-  .conversation-pane { grid-area: convo; }
-  .stage-pane       { grid-area: stage; }
-  .memory-pane      { grid-area: memo; }
-
-  .conversation-pane,
-  .memory-pane,
   .stage-pane {
-    display: flex; flex-direction: column; gap: 12px;
-    min-height: 0;  /* permits child flex/overflow inside grid */
+    position: absolute; inset: 0;
+    display: flex;
+    min-width: 0; min-height: 0;
   }
-
-  .stage-pane { gap: 16px; }
-  .conversation-pane h2,
-  .memory-pane h2 { flex: 0 0 auto; }
+  .controls-pane {
+    position: absolute;
+    left: 50%; bottom: 18px;
+    transform: translateX(-50%);
+    width: min(720px, calc(100vw - 32px));
+    z-index: 30;
+  }
 
   /* Header */
   .header {
@@ -82,11 +79,11 @@
     font-weight: 800;
     font-size: 22px;
     letter-spacing: 0.4em;
-    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    background: linear-gradient(96deg, var(--primary), var(--cyan) 55%, var(--magenta));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    text-shadow: 0 0 24px rgba(90,216,255,0.3);
+    text-shadow: 0 0 24px rgba(168,155,255,0.3);
   }
   .pill {
     padding: 4px 12px;
@@ -112,11 +109,11 @@
     box-shadow: 0 0 8px currentColor;
   }
   .pill.status-idle      { color: var(--muted); }
-  .pill.status-ready     { color: var(--cyan);    border-color: rgba(90,216,255,0.4); box-shadow: 0 0 16px rgba(90,216,255,0.2); }
-  .pill.status-recording { color: var(--amber);   border-color: rgba(255,193,90,0.5); box-shadow: 0 0 24px rgba(255,193,90,0.4); animation: blink 1s infinite; }
+  .pill.status-ready     { color: var(--cyan);    border-color: rgba(98,212,255,0.4); box-shadow: 0 0 16px rgba(98,212,255,0.2); }
+  .pill.status-recording { color: var(--amber);   border-color: rgba(255,155,102,0.5); box-shadow: 0 0 24px rgba(255,155,102,0.4); animation: blink 1s infinite; }
   .pill.status-submitting,
-  .pill.status-thinking  { color: var(--magenta); border-color: rgba(255,90,216,0.5); box-shadow: 0 0 24px rgba(255,90,216,0.4); }
-  .pill.status-speaking  { color: var(--green);   border-color: rgba(95,255,177,0.5); box-shadow: 0 0 24px rgba(95,255,177,0.4); }
+  .pill.status-thinking  { color: var(--magenta); border-color: rgba(255,133,193,0.5); box-shadow: 0 0 24px rgba(255,133,193,0.4); }
+  .pill.status-speaking  { color: var(--green);   border-color: rgba(123,232,164,0.5); box-shadow: 0 0 24px rgba(123,232,164,0.4); }
   @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 
   /* Mode toggle (open mic / push-to-talk) */
@@ -144,9 +141,9 @@
   }
   .mode-btn:hover { color: var(--text); }
   .mode-btn.active {
-    background: linear-gradient(135deg, rgba(90,216,255,0.18), rgba(255,90,216,0.12));
+    background: linear-gradient(135deg, rgba(98,212,255,0.18), rgba(255,133,193,0.12));
     color: var(--cyan);
-    box-shadow: 0 0 12px rgba(90,216,255,0.25);
+    box-shadow: 0 0 12px rgba(98,212,255,0.25);
   }
 
   /* Main column */
@@ -157,20 +154,16 @@
     min-width: 0;
   }
 
-  /* Stage: visualizer + camera thumbnail. Fills the available height in
-     the center column. */
+  /* Stage: fullscreen visualizer. No card chrome — sphere is hero. */
   .stage {
     position: relative;
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 18px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: transparent;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     flex: 1 1 auto;
+    width: 100%;
     min-height: 0;
     isolation: isolate;
   }
@@ -178,8 +171,8 @@
     content: '';
     position: absolute; inset: 0;
     background:
-      radial-gradient(circle at 30% 20%, rgba(90,216,255,0.12), transparent 50%),
-      radial-gradient(circle at 70% 80%, rgba(255,90,216,0.10), transparent 50%);
+      radial-gradient(circle at 30% 20%, rgba(98,212,255,0.12), transparent 50%),
+      radial-gradient(circle at 70% 80%, rgba(255,133,193,0.10), transparent 50%);
     z-index: -1;
   }
 
@@ -189,7 +182,15 @@
     height: 100%;
     display: block;
   }
-  .stage { min-height: 320px; }
+  .stage { min-height: 280px; }
+
+  /* Compact transcript ribbon below the sphere — capped height, scrolls.
+     Subtler than a full panel: the sphere stays the hero. */
+  .transcript-ribbon {
+    flex: 0 1 26vh;
+    min-height: 80px;
+    max-height: 26vh;
+  }
 
   /* Character picker in the header */
   .char-picker {
@@ -212,9 +213,9 @@
   }
   .char-btn:hover { color: var(--text); }
   .char-btn.active {
-    background: linear-gradient(135deg, rgba(90,216,255,0.2), rgba(255,90,216,0.15));
+    background: linear-gradient(135deg, rgba(98,212,255,0.2), rgba(255,133,193,0.15));
     color: var(--cyan);
-    box-shadow: 0 0 12px rgba(90,216,255,0.3);
+    box-shadow: 0 0 12px rgba(98,212,255,0.3);
   }
 
   /* Camera thumbnail */
@@ -275,15 +276,15 @@
   }
   .turn .you {
     align-self: flex-end;
-    background: rgba(90,216,255,0.10);
-    border: 1px solid rgba(90,216,255,0.25);
+    background: rgba(98,212,255,0.10);
+    border: 1px solid rgba(98,212,255,0.25);
     color: var(--text);
   }
   .turn .you .label { color: var(--cyan); font-size: 10px; letter-spacing: 0.2em; margin-right: 8px; }
   .turn .rocky {
     align-self: flex-start;
-    background: rgba(255,90,216,0.08);
-    border: 1px solid rgba(255,90,216,0.22);
+    background: rgba(255,133,193,0.08);
+    border: 1px solid rgba(255,133,193,0.22);
   }
   .turn .rocky .label { color: var(--magenta); font-size: 10px; letter-spacing: 0.2em; margin-right: 8px; }
 
@@ -296,9 +297,9 @@
   }
   #talk-btn {
     padding: 18px 24px;
-    background: linear-gradient(135deg, rgba(90,216,255,0.15), rgba(255,90,216,0.15));
+    background: linear-gradient(135deg, rgba(98,212,255,0.15), rgba(255,133,193,0.15));
     color: var(--cyan);
-    border: 1px solid rgba(90,216,255,0.45);
+    border: 1px solid rgba(98,212,255,0.45);
     border-radius: 14px;
     font-family: inherit;
     font-size: 14px;
@@ -306,24 +307,24 @@
     letter-spacing: 0.3em;
     cursor: pointer;
     transition: all 0.15s;
-    box-shadow: 0 0 24px rgba(90,216,255,0.15);
+    box-shadow: 0 0 24px rgba(98,212,255,0.15);
   }
   #talk-btn:hover {
-    background: linear-gradient(135deg, rgba(90,216,255,0.25), rgba(255,90,216,0.25));
-    box-shadow: 0 0 32px rgba(90,216,255,0.3);
+    background: linear-gradient(135deg, rgba(98,212,255,0.25), rgba(255,133,193,0.25));
+    box-shadow: 0 0 32px rgba(98,212,255,0.3);
   }
   #talk-btn:active { transform: scale(0.98); }
   #talk-btn.recording {
     color: var(--amber);
-    border-color: rgba(255,193,90,0.7);
-    background: linear-gradient(135deg, rgba(255,193,90,0.2), rgba(255,90,90,0.2));
-    box-shadow: 0 0 32px rgba(255,193,90,0.4);
+    border-color: rgba(255,155,102,0.7);
+    background: linear-gradient(135deg, rgba(255,155,102,0.2), rgba(255,90,90,0.2));
+    box-shadow: 0 0 32px rgba(255,155,102,0.4);
     animation: blink 1s infinite;
   }
   #talk-btn:disabled {
     color: var(--muted);
-    border-color: rgba(108,122,150,0.3);
-    background: rgba(20,28,48,0.4);
+    border-color: rgba(110,102,138,0.3);
+    background: rgba(35,24,54,0.4);
     cursor: not-allowed;
     box-shadow: none;
     animation: none;
@@ -363,7 +364,7 @@
     font-size: 11px;
     letter-spacing: 0.3em;
     color: var(--cyan);
-    text-shadow: 0 0 8px rgba(90,216,255,0.4);
+    text-shadow: 0 0 8px rgba(98,212,255,0.4);
   }
   /* Memory pane wraps its content in a flex column. */
   .memory-pane > .pane-card { flex: 0 0 auto; }
@@ -384,34 +385,34 @@
   .memory-list::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
   .memory {
     padding: 10px 12px;
-    background: rgba(20,28,48,0.6);
-    border: 1px solid rgba(120,200,255,0.12);
+    background: rgba(35,24,54,0.6);
+    border: 1px solid rgba(168,155,255,0.12);
     border-radius: 8px;
     font-size: 12px;
     line-height: 1.4;
     transition: all 0.2s;
     display: flex; gap: 10px; align-items: flex-start;
   }
-  .memory:hover { border-color: rgba(90,216,255,0.3); }
+  .memory:hover { border-color: rgba(98,212,255,0.3); }
   .memory-thumb {
     width: 44px; height: 44px;
     border-radius: 6px;
     object-fit: cover;
-    border: 1px solid rgba(120,200,255,0.2);
+    border: 1px solid rgba(168,155,255,0.2);
     flex-shrink: 0;
     background: #1a1a1d;
   }
   .memory-fact { flex: 1; min-width: 0; }
   .memory.new {
-    background: linear-gradient(90deg, rgba(95,255,177,0.18), rgba(90,216,255,0.1));
-    border-color: rgba(95,255,177,0.5);
+    background: linear-gradient(90deg, rgba(123,232,164,0.18), rgba(98,212,255,0.1));
+    border-color: rgba(123,232,164,0.5);
     color: var(--green);
     animation: chip-in 1.5s ease-out;
-    box-shadow: 0 0 16px rgba(95,255,177,0.2);
+    box-shadow: 0 0 16px rgba(123,232,164,0.2);
   }
   @keyframes chip-in {
-    0%   { transform: translateX(12px); opacity: 0; box-shadow: 0 0 32px rgba(95,255,177,0.6); }
-    100% { transform: translateX(0);    opacity: 1; box-shadow: 0 0 16px rgba(95,255,177,0.2); }
+    0%   { transform: translateX(12px); opacity: 0; box-shadow: 0 0 32px rgba(123,232,164,0.6); }
+    100% { transform: translateX(0);    opacity: 1; box-shadow: 0 0 16px rgba(123,232,164,0.2); }
   }
   .empty-mem {
     color: var(--muted);
@@ -423,14 +424,14 @@
 
   /* Adaptive panel */
   .adapt-card {
-    background: linear-gradient(135deg, rgba(90,216,255,0.08), rgba(255,90,216,0.05));
-    border: 1px solid rgba(255,90,216,0.25);
+    background: linear-gradient(135deg, rgba(98,212,255,0.08), rgba(255,133,193,0.05));
+    border: 1px solid rgba(255,133,193,0.25);
     border-radius: 10px;
     padding: 12px 14px;
     margin-bottom: 4px;
   }
   .adapt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .adapt-header h2 { color: var(--magenta); text-shadow: 0 0 8px rgba(255,90,216,0.4); }
+  .adapt-header h2 { color: var(--magenta); text-shadow: 0 0 8px rgba(255,133,193,0.4); }
   .adapt-pulse {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--magenta); box-shadow: 0 0 10px var(--magenta);
@@ -457,24 +458,24 @@
 
   /* Adaption Labs corpus card */
   .adapt-corpus {
-    background: linear-gradient(135deg, rgba(255,193,90,0.08), rgba(95,255,177,0.05));
-    border-color: rgba(95,255,177,0.25);
+    background: linear-gradient(135deg, rgba(255,155,102,0.08), rgba(123,232,164,0.05));
+    border-color: rgba(123,232,164,0.25);
   }
-  .adapt-corpus h2 { color: var(--green); text-shadow: 0 0 8px rgba(95,255,177,0.4); }
+  .adapt-corpus h2 { color: var(--green); text-shadow: 0 0 8px rgba(123,232,164,0.4); }
   .corpus-status {
     font-size: 10px; letter-spacing: 0.15em;
     padding: 2px 8px; border-radius: 99px;
-    border: 1px solid rgba(108,122,150,0.4);
+    border: 1px solid rgba(110,102,138,0.4);
     color: var(--muted);
     text-transform: uppercase;
   }
   .corpus-status.uploading,
   .corpus-status.running {
-    color: var(--amber); border-color: rgba(255,193,90,0.5);
+    color: var(--amber); border-color: rgba(255,155,102,0.5);
     animation: blink 1.2s infinite;
   }
   .corpus-status.completed {
-    color: var(--green); border-color: rgba(95,255,177,0.5);
+    color: var(--green); border-color: rgba(123,232,164,0.5);
   }
   .corpus-status.failed {
     color: #ff7777; border-color: rgba(255,90,90,0.5);
@@ -482,9 +483,9 @@
   .corpus-btn {
     margin-top: 10px; width: 100%;
     padding: 8px 12px;
-    background: linear-gradient(135deg, rgba(95,255,177,0.15), rgba(90,216,255,0.10));
+    background: linear-gradient(135deg, rgba(123,232,164,0.15), rgba(98,212,255,0.10));
     color: var(--green);
-    border: 1px solid rgba(95,255,177,0.4);
+    border: 1px solid rgba(123,232,164,0.4);
     border-radius: 8px;
     font-family: inherit;
     font-size: 11px; font-weight: 700; letter-spacing: 0.25em;
@@ -492,13 +493,13 @@
     transition: all 0.15s;
   }
   .corpus-btn:hover {
-    background: linear-gradient(135deg, rgba(95,255,177,0.25), rgba(90,216,255,0.18));
-    box-shadow: 0 0 16px rgba(95,255,177,0.3);
+    background: linear-gradient(135deg, rgba(123,232,164,0.25), rgba(98,212,255,0.18));
+    box-shadow: 0 0 16px rgba(123,232,164,0.3);
   }
   .corpus-btn:active { transform: scale(0.98); }
   .corpus-btn:disabled {
-    color: var(--muted); border-color: rgba(108,122,150,0.3);
-    background: rgba(20,28,48,0.4);
+    color: var(--muted); border-color: rgba(110,102,138,0.3);
+    background: rgba(35,24,54,0.4);
     cursor: not-allowed;
   }
 
@@ -507,9 +508,9 @@
     margin-left: 8px;
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 10px;
-    border: 1px solid rgba(95,255,177,0.25);
+    border: 1px solid rgba(123,232,164,0.25);
     border-radius: 99px;
-    background: rgba(95,255,177,0.05);
+    background: rgba(123,232,164,0.05);
     font-size: 10px; letter-spacing: 0.18em;
     color: var(--muted);
     font-family: inherit;
@@ -517,8 +518,8 @@
     transition: all 0.15s;
   }
   .corpus-mini:hover {
-    background: rgba(95,255,177,0.15);
-    box-shadow: 0 0 14px rgba(95,255,177,0.25);
+    background: rgba(123,232,164,0.15);
+    box-shadow: 0 0 14px rgba(123,232,164,0.25);
   }
   .corpus-mini:disabled {
     opacity: 0.5; cursor: not-allowed;
@@ -544,8 +545,8 @@
   .lightbox-card {
     position: relative; z-index: 1;
     max-width: 720px; width: 90vw;
-    background: linear-gradient(135deg, rgba(20,28,48,0.95), rgba(10,15,30,0.95));
-    border: 1px solid rgba(120,200,255,0.3);
+    background: linear-gradient(135deg, rgba(35,24,54,0.95), rgba(15,10,30,0.95));
+    border: 1px solid rgba(168,155,255,0.3);
     border-radius: 16px;
     padding: 20px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
@@ -559,8 +560,8 @@
   .lightbox-close {
     position: absolute; top: 12px; right: 12px;
     width: 36px; height: 36px; border-radius: 50%;
-    background: rgba(108,122,150,0.2); color: var(--text);
-    border: 1px solid rgba(120,200,255,0.2);
+    background: rgba(110,102,138,0.2); color: var(--text);
+    border: 1px solid rgba(168,155,255,0.2);
     font-size: 22px; line-height: 1; cursor: pointer;
   }
   .lightbox-close:hover { background: rgba(255,90,90,0.3); border-color: rgba(255,90,90,0.5); }
@@ -690,7 +691,7 @@
     background: var(--cyan);
     border: 2px solid var(--bg);
     cursor: pointer;
-    box-shadow: 0 0 12px rgba(90,216,255,0.6);
+    box-shadow: 0 0 12px rgba(98,212,255,0.6);
   }
   #threshold-slider::-moz-range-thumb {
     width: 16px; height: 16px;
@@ -698,7 +699,298 @@
     background: var(--cyan);
     border: 2px solid var(--bg);
     cursor: pointer;
-    box-shadow: 0 0 12px rgba(90,216,255,0.6);
+    box-shadow: 0 0 12px rgba(98,212,255,0.6);
+  }
+
+  /* ============ FLOATING TOP BAR ============
+     Glass pill floating at the top of the screen — header doesn't take
+     layout space so the sphere can fill the viewport. */
+  .topbar {
+    position: absolute;
+    top: 14px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex; align-items: center; gap: 14px;
+    padding: 8px 16px;
+    background: rgba(15, 10, 28, 0.55);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    border-radius: 99px;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.4);
+  }
+  .topbar .header { padding: 0; }
+
+  /* ============ LIVE CAPTION (inside drawer) ============
+     Sticky panel at the top of the conversation drawer, showing the
+     latest exchange. Fades in on each new turn. */
+  .live-caption {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .live-caption-empty {
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+    padding: 8px 0;
+  }
+  .live-caption.has-content .live-caption-empty { display: none; }
+  .subtitle-line {
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.32s ease, transform 0.32s ease;
+  }
+  .subtitle-line.show { opacity: 1; transform: translateY(0); }
+  .subtitle-line.you {
+    color: var(--cyan);
+    background: rgba(98,212,255,0.08);
+    border: 1px solid rgba(98,212,255,0.18);
+  }
+  .subtitle-line.them {
+    color: var(--text);
+    background: rgba(35,24,54,0.55);
+    border: 1px solid rgba(168,155,255,0.22);
+  }
+  .subtitle-line .who {
+    display: block;
+    font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+    font-size: 9px; letter-spacing: 0.3em; font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  /* ============ DETAILS DRAWER ============
+     Holds ADAPTED + MEMORIES off-screen by default. A toggle in the
+     header slides it in from the right. Keeps the main view focused
+     on the sphere. */
+  .details-toggle {
+    padding: 8px 14px;
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    border-radius: 99px;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 10px; letter-spacing: 0.25em;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .details-toggle:hover {
+    color: var(--primary);
+    border-color: rgba(168,155,255,0.4);
+    box-shadow: 0 0 12px rgba(168,155,255,0.2);
+  }
+  .details-toggle.open {
+    color: var(--primary);
+    border-color: rgba(168,155,255,0.6);
+    background: rgba(168,155,255,0.08);
+    box-shadow: 0 0 14px rgba(168,155,255,0.3);
+  }
+
+  .details-drawer,
+  .convo-drawer {
+    position: fixed; top: 0; bottom: 0;
+    width: 380px; max-width: 90vw;
+    z-index: 200;
+    transition: transform 0.32s cubic-bezier(.6,.05,.3,1);
+    background: rgba(15, 10, 28, 0.94);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    padding: 18px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .details-drawer {
+    right: 0;
+    transform: translateX(105%);
+    border-left: 1px solid rgba(168,155,255,0.22);
+    box-shadow: -24px 0 60px rgba(0,0,0,0.5);
+  }
+  .convo-drawer {
+    left: 0;
+    transform: translateX(-105%);
+    border-right: 1px solid rgba(168,155,255,0.22);
+    box-shadow: 24px 0 60px rgba(0,0,0,0.5);
+  }
+  .convo-drawer.open { transform: translateX(0); }
+  .drawer-section-label {
+    font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+    font-size: 10px; letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin: 6px 0 -6px 2px;
+  }
+  .drawer-history {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 14px;
+    max-height: 40vh;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 10px;
+    font-size: 13px; line-height: 1.45;
+  }
+  .drawer-history::-webkit-scrollbar { width: 4px; }
+  .drawer-history::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
+  .details-drawer.open { transform: translateX(0); }
+  .details-drawer .pane-card,
+  .details-drawer .adapt-card { backdrop-filter: none; }
+  .drawer-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 4px;
+  }
+  .drawer-header h2 {
+    margin: 0;
+    font-size: 11px; letter-spacing: 0.32em;
+    color: var(--primary);
+    text-shadow: 0 0 10px rgba(168,155,255,0.4);
+  }
+  .drawer-close {
+    background: transparent; border: 1px solid var(--panel-border);
+    color: var(--muted);
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 16px; line-height: 1; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .drawer-close:hover {
+    color: var(--text);
+    border-color: rgba(168,155,255,0.4);
+  }
+  .details-backdrop {
+    position: fixed; inset: 0; z-index: 199;
+    background: rgba(8, 6, 18, 0.4);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.28s ease;
+  }
+  .details-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* Bottom control bar — icon-organized, two drawer toggles flanking
+     mode/sensitivity/talk/meter in the middle. */
+  .control-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .ctl-sep {
+    display: inline-block;
+    width: 1px; height: 22px;
+    background: var(--panel-border);
+    flex: 0 0 auto;
+  }
+
+  /* Icon-side toggles (CONVO / MEMORY) — pill with icon + small label */
+  .ctl-icon {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    border-radius: 99px;
+    color: var(--text-soft, var(--muted));
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex: 0 0 auto;
+  }
+  .ctl-icon svg { width: 16px; height: 16px; }
+  .ctl-icon .ctl-label {
+    font-size: 10px; letter-spacing: 0.22em; font-weight: 700;
+    text-transform: uppercase;
+  }
+  .ctl-icon:hover {
+    color: var(--primary);
+    border-color: rgba(168,155,255,0.4);
+    box-shadow: 0 0 12px rgba(168,155,255,0.18);
+  }
+  .ctl-icon.open {
+    color: var(--primary);
+    border-color: rgba(168,155,255,0.6);
+    background: rgba(168,155,255,0.10);
+    box-shadow: 0 0 16px rgba(168,155,255,0.25);
+  }
+  /* On smaller screens, drop the label so the icon shows alone. */
+  @media (max-width: 720px) {
+    .ctl-icon .ctl-label { display: none; }
+    .ctl-icon { padding: 8px; }
+  }
+
+  /* TALK / STOP button — text pill, prominent in the middle of the bar.
+     recorder.js swaps the textContent between TALK / STOP & SEND /
+     AUTO (open mic), so this stays text-based on purpose. */
+  #talk-btn.ctl-talk {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 10px 18px;
+    flex: 0 0 auto;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    white-space: nowrap;
+  }
+
+  /* Mode toggle inside control bar — icons stacked with labels. */
+  .control-bar .mode-toggle { flex: 0 0 auto; }
+  .control-bar .mode-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+  }
+  .control-bar .mode-btn svg { width: 14px; height: 14px; }
+
+  /* Compact sensitivity slot — flexible width, never collapses. */
+  .control-bar .threshold-row {
+    flex: 1 1 140px;
+    min-width: 100px; max-width: 220px;
+  }
+  .control-bar .mode-toggle { margin-left: 0; }
+  .control-bar .threshold-row {
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+  }
+  .control-bar .threshold-label {
+    font-size: 9px; letter-spacing: 0.22em;
+    display: flex; justify-content: space-between; gap: 12px;
+    color: var(--muted);
+  }
+  .control-bar .threshold-tick { display: none; }
+  .control-bar #threshold-slider { margin: 2px 0 0; }
+  .control-bar.ptt .threshold-row { opacity: 0.4; pointer-events: none; }
+  .control-bar #talk-btn {
+    padding: 10px 18px;
+    font-size: 11px; letter-spacing: 0.25em;
+    border-radius: 99px;
+  }
+  .control-bar.open-mic #talk-btn { opacity: 0.45; }
+  .control-bar .meter-h {
+    width: 80px; height: 6px;
+    border-radius: 99px;
+    position: relative;
+  }
+  .control-bar .meter-h-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--amber) 70%, var(--magenta));
+    border-radius: 99px;
+    transition: width 0.05s;
   }
 </style>
 </head>
@@ -706,49 +998,13 @@
   <div class="app">
     <header class="topbar">
       <div class="header">
-        <div class="brand">COMPANION</div>
+        <div class="brand">AURA</div>
         <div id="status" class="pill status-idle">idle</div>
         <div class="char-picker" id="char-picker">
           <!-- populated by app.js from /api/characters -->
         </div>
-        <button class="corpus-mini" id="corpus-btn"
-                title="Click to run an Adaption Labs adapt cycle now. Auto-runs every 30 turns; unchanged categories are skipped.">
-          <span class="corpus-mini-label">ADAPT</span>
-          <span class="corpus-mini-count" id="corpus-turns">0</span>
-          <span class="corpus-status" id="corpus-status">idle</span>
-        </button>
       </div>
     </header>
-
-    <section class="conversation-pane" id="left-pane">
-      <div class="left-controls">
-        <div class="mode-toggle">
-          <button class="mode-btn active" data-mode="open">OPEN MIC</button>
-          <button class="mode-btn" data-mode="ptt">PUSH TO TALK</button>
-        </div>
-        <div class="threshold-row" id="threshold-row">
-          <div class="threshold-label">
-            <span>SENSITIVITY</span>
-            <span class="threshold-val" id="threshold-val">0.020</span>
-          </div>
-          <input type="range" id="threshold-slider"
-                 min="0.005" max="0.1" step="0.005" value="0.02">
-          <div class="threshold-tick">
-            <span>more sensitive</span><span>less sensitive</span>
-          </div>
-        </div>
-        <div class="talk-row">
-          <button id="talk-btn" disabled>TALK</button>
-          <div class="meter-h" title="mic level">
-            <div class="meter-h-fill" id="meter"></div>
-          </div>
-        </div>
-      </div>
-      <h2 style="padding: 0 4px">CONVERSATION</h2>
-      <div class="transcript" id="transcript">
-        <div class="empty">Allow camera + microphone, then talk.</div>
-      </div>
-    </section>
 
     <main class="stage-pane">
       <div class="stage">
@@ -760,42 +1016,140 @@
       </div>
     </main>
 
-    <aside class="memory-pane">
-      <div class="adapt-card" id="adapt-card">
-        <div class="adapt-header">
-          <h2>ADAPTED</h2>
-          <span class="adapt-pulse" id="adapt-pulse"></span>
-        </div>
-        <div class="adapt-rows" id="adapt-rows">
-          <div class="adapt-row">
-            <span class="adapt-key">REPLY LIMIT</span>
-            <span class="adapt-val" id="adapt-words">8w</span>
-          </div>
-          <div class="adapt-row">
-            <span class="adapt-key">SHORTER ASKED</span>
-            <span class="adapt-val" id="adapt-shorter">0×</span>
-          </div>
-          <div class="adapt-row">
-            <span class="adapt-key">FREQ TOPICS</span>
-            <span class="adapt-val" id="adapt-topics">—</span>
-          </div>
-        </div>
-      </div>
+    <section class="controls-pane">
+      <div class="control-bar" id="control-bar">
 
-      <div class="pane-card memories-card">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <h2>MEMORIES</h2>
-          <span style="display:inline-flex;gap:10px;align-items:baseline">
-            <span class="memory-count" id="memory-count">0</span>
-            <button id="clear-mem-btn" class="mem-clear" title="Clear all memories">CLEAR</button>
-          </span>
+        <!-- LEFT: open Conversation drawer -->
+        <button class="ctl-icon ctl-side" id="convo-toggle"
+                title="Open conversation panel" aria-label="Conversation">
+          <i data-lucide="message-square-text" aria-hidden="true"></i>
+          <span class="ctl-label">CONVO</span>
+        </button>
+
+        <span class="ctl-sep" aria-hidden="true"></span>
+
+        <!-- Mode toggle -->
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="open" title="Auto record on speech">
+            <i data-lucide="audio-lines" aria-hidden="true"></i>
+            <span>OPEN</span>
+          </button>
+          <button class="mode-btn" data-mode="ptt" title="Push to talk">
+            <i data-lucide="hand" aria-hidden="true"></i>
+            <span>PTT</span>
+          </button>
         </div>
-        <div class="memory-list" id="memories">
-          <div class="empty-mem">no memories yet</div>
+
+        <!-- Sensitivity (compact) -->
+        <div class="threshold-row" id="threshold-row">
+          <div class="threshold-label">
+            <span>SENS</span>
+            <span class="threshold-val" id="threshold-val">0.020</span>
+          </div>
+          <input type="range" id="threshold-slider"
+                 min="0.005" max="0.1" step="0.005" value="0.02">
+          <div class="threshold-tick">
+            <span>more</span><span>less</span>
+          </div>
+        </div>
+
+        <!-- TALK / STOP button — text label is set by recorder.js per state -->
+        <button id="talk-btn" class="ctl-talk" disabled
+                title="Click to talk (or auto in OPEN mode)">TALK</button>
+
+        <!-- Mic meter -->
+        <div class="meter-h" title="mic level">
+          <div class="meter-h-fill" id="meter"></div>
+        </div>
+
+        <span class="ctl-sep" aria-hidden="true"></span>
+
+        <!-- RIGHT: open Memory / Adapt drawer -->
+        <button class="ctl-icon ctl-side" id="memory-toggle"
+                title="Open memory & adaptation panel" aria-label="Memory">
+          <i data-lucide="brain-circuit" aria-hidden="true"></i>
+          <span class="ctl-label">MEMORY</span>
+        </button>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- Backdrop shared by both drawers -->
+  <div class="details-backdrop" id="details-backdrop"></div>
+
+  <!-- LEFT: Conversation drawer (live caption + transcript). -->
+  <aside class="convo-drawer" id="convo-drawer">
+    <div class="drawer-header">
+      <h2>CONVERSATION</h2>
+      <button class="drawer-close" id="convo-close" aria-label="Close">×</button>
+    </div>
+
+    <!-- Live caption: latest exchange, sticky at top. Updates with fade. -->
+    <div class="live-caption" id="subtitle" aria-live="polite">
+      <div class="subtitle-line you" id="subtitle-you" hidden>
+        <span class="who">YOU</span><span class="text"></span>
+      </div>
+      <div class="subtitle-line them" id="subtitle-them" hidden>
+        <span class="who">ROCKY</span><span class="text"></span>
+      </div>
+      <div class="live-caption-empty" id="live-caption-empty">Waiting for you to speak…</div>
+    </div>
+
+    <div class="drawer-section-label">HISTORY</div>
+    <div class="drawer-history" id="transcript">
+      <div class="empty">Allow camera + microphone, then talk.</div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: Memory + Adapted + Adaption Labs drawer. -->
+  <aside class="details-drawer" id="details-drawer">
+    <div class="drawer-header">
+      <h2>MEMORY &amp; ADAPT</h2>
+      <button class="drawer-close" id="drawer-close" aria-label="Close">×</button>
+    </div>
+
+    <div class="adapt-card" id="adapt-card">
+      <div class="adapt-header">
+        <h2>ADAPTED</h2>
+        <span class="adapt-pulse" id="adapt-pulse"></span>
+      </div>
+      <div class="adapt-rows" id="adapt-rows">
+        <div class="adapt-row">
+          <span class="adapt-key">REPLY LIMIT</span>
+          <span class="adapt-val" id="adapt-words">8w</span>
+        </div>
+        <div class="adapt-row">
+          <span class="adapt-key">SHORTER ASKED</span>
+          <span class="adapt-val" id="adapt-shorter">0×</span>
+        </div>
+        <div class="adapt-row">
+          <span class="adapt-key">FREQ TOPICS</span>
+          <span class="adapt-val" id="adapt-topics">—</span>
         </div>
       </div>
-    </aside>
-  </div>
+    </div>
+
+    <button class="corpus-mini" id="corpus-btn" style="margin-left: 0; align-self: flex-start;"
+            title="Run an Adaption Labs adapt cycle. Auto-runs every 30 turns.">
+      <span class="corpus-mini-label">ADAPT</span>
+      <span class="corpus-mini-count" id="corpus-turns">0</span>
+      <span class="corpus-status" id="corpus-status">idle</span>
+    </button>
+
+    <div class="pane-card memories-card" style="flex: 1 1 auto;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <h2>MEMORIES</h2>
+        <span style="display:inline-flex;gap:10px;align-items:baseline">
+          <span class="memory-count" id="memory-count">0</span>
+          <button id="clear-mem-btn" class="mem-clear" title="Clear all memories">CLEAR</button>
+        </span>
+      </div>
+      <div class="memory-list" id="memories">
+        <div class="empty-mem">no memories yet</div>
+      </div>
+    </div>
+  </aside>
 
   <audio id="audio"></audio>
 
@@ -812,6 +1166,10 @@
     </div>
   </div>
 
+  <script>
+    // Replace all <i data-lucide="..."> placeholders with SVG icons.
+    if (window.lucide) lucide.createIcons();
+  </script>
   <script src="/static/recorder.js"></script>
   <script src="/static/app.js"></script>
 </body>

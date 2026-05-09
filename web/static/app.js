@@ -67,12 +67,37 @@ if (clearMemBtn) {
   });
 }
 
+// Live caption inside the conversation drawer — shows the latest exchange.
+const subtitleYouEl  = document.getElementById('subtitle-you');
+const subtitleThemEl = document.getElementById('subtitle-them');
+const liveCaptionEl  = document.getElementById('subtitle');
+
+function showSubtitle(el, text, who) {
+  if (!el) return;
+  if (!text) { el.hidden = true; el.classList.remove('show'); return; }
+  el.hidden = false;
+  el.querySelector('.text').textContent = text;
+  if (who) el.querySelector('.who').textContent = who;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+}
+
 function appendTurn(youText, rockyText, speakerId) {
   if (isFirstTurn) {
     transcriptEl.innerHTML = '';
     isFirstTurn = false;
   }
   const speakerLabel = (speakerId || 'rocky').toUpperCase();
+
+  // Live caption: latest exchange at the top of the drawer.
+  showSubtitle(subtitleYouEl, youText, 'YOU');
+  showSubtitle(subtitleThemEl, rockyText, speakerLabel);
+  if (liveCaptionEl && (youText || rockyText)) {
+    liveCaptionEl.classList.add('has-content');
+  }
+
+  // Drawer history: full transcript, append-only.
   const turn = document.createElement('div');
   turn.className = 'turn';
   if (youText) {
@@ -90,6 +115,46 @@ function appendTurn(youText, rockyText, speakerId) {
   transcriptEl.appendChild(turn);
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
+
+// Two drawers: LEFT = conversation, RIGHT = memory + adapt.
+// Both share the same backdrop. They can be open independently.
+const convoToggle    = document.getElementById('convo-toggle');
+const convoDrawer    = document.getElementById('convo-drawer');
+const convoClose     = document.getElementById('convo-close');
+const memoryToggle   = document.getElementById('memory-toggle');
+const detailsDrawer  = document.getElementById('details-drawer');
+const drawerClose    = document.getElementById('drawer-close');
+const detailsBackdrop = document.getElementById('details-backdrop');
+
+function syncBackdrop() {
+  const anyOpen = convoDrawer.classList.contains('open')
+               || detailsDrawer.classList.contains('open');
+  detailsBackdrop.classList.toggle('open', anyOpen);
+}
+function setConvoDrawer(open) {
+  convoDrawer.classList.toggle('open', open);
+  if (convoToggle) convoToggle.classList.toggle('open', open);
+  syncBackdrop();
+}
+function setMemoryDrawer(open) {
+  detailsDrawer.classList.toggle('open', open);
+  if (memoryToggle) memoryToggle.classList.toggle('open', open);
+  syncBackdrop();
+}
+if (convoToggle)  convoToggle.addEventListener('click',
+  () => setConvoDrawer(!convoDrawer.classList.contains('open')));
+if (convoClose)   convoClose.addEventListener('click', () => setConvoDrawer(false));
+if (memoryToggle) memoryToggle.addEventListener('click',
+  () => setMemoryDrawer(!detailsDrawer.classList.contains('open')));
+if (drawerClose)  drawerClose.addEventListener('click', () => setMemoryDrawer(false));
+if (detailsBackdrop) detailsBackdrop.addEventListener('click', () => {
+  setConvoDrawer(false); setMemoryDrawer(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (detailsDrawer.classList.contains('open')) setMemoryDrawer(false);
+  else if (convoDrawer.classList.contains('open')) setConvoDrawer(false);
+});
 
 function escapeHtml(s) {
   const d = document.createElement('div');
@@ -184,6 +249,23 @@ async function switchCharacter(id) {
 }
 
 loadCharacters();
+
+// Rehydrate the transcript from the persisted conversation log so reloads
+// preserve context. Each turn is { user, assistant, ts }.
+async function loadHistory() {
+  if (!transcriptEl) return;
+  try {
+    const r = await fetch('/api/conversation');
+    const j = await r.json();
+    const turns = j.turns || [];
+    if (turns.length === 0) return;
+    const speakerId = currentCharacterId || 'rocky';
+    for (const t of turns) appendTurn(t.user || '', t.assistant || '', speakerId);
+  } catch (e) {
+    console.warn('[history] failed to load', e);
+  }
+}
+loadHistory();
 
 // ---------------- Adaption Labs corpus mini ----------------
 // Auto-runs on the server every 5 turns; UI just shows status.
