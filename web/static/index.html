@@ -98,6 +98,36 @@
   .pill.status-speaking  { color: var(--green);   border-color: rgba(95,255,177,0.5); box-shadow: 0 0 24px rgba(95,255,177,0.4); }
   @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 
+  /* Mode toggle (open mic / push-to-talk) */
+  .mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--panel-border);
+    border-radius: 99px;
+    padding: 3px;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    margin-left: auto;
+  }
+  .mode-btn {
+    padding: 5px 14px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    cursor: pointer;
+    border-radius: 99px;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  }
+  .mode-btn:hover { color: var(--text); }
+  .mode-btn.active {
+    background: linear-gradient(135deg, rgba(90,216,255,0.18), rgba(255,90,216,0.12));
+    color: var(--cyan);
+    box-shadow: 0 0 12px rgba(90,216,255,0.25);
+  }
+
   /* Main column */
   main {
     display: grid;
@@ -363,6 +393,10 @@
       <div class="header">
         <div class="brand">ROCKY</div>
         <div id="status" class="pill status-idle">idle</div>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="open">OPEN MIC</button>
+          <button class="mode-btn" data-mode="ptt">PUSH TO TALK</button>
+        </div>
       </div>
 
       <div class="stage">

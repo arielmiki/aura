@@ -26,6 +26,10 @@ let belowSince = 0;
 let aboveSince = 0;
 let recordingStart = 0;
 
+// Mode: 'open' (hands-free auto-start + auto-submit) | 'ptt' (TALK button only)
+const MODE_KEY = 'rocky.mode';
+let mode = localStorage.getItem(MODE_KEY) || 'open';
+
 const SILENCE_AUTO_SUBMIT_MS = 1000;  // stop after 1s of quiet
 const SPEECH_START_MS = 250;          // start after 250ms of sound
 const MIN_RECORDING_MS = 500;
@@ -80,9 +84,27 @@ async function ensureMedia() {
   return true;
 }
 
+function setMode(m) {
+  mode = m;
+  localStorage.setItem(MODE_KEY, m);
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === m);
+  });
+  // Reset VAD timers so a stale aboveSince doesn't immediately fire when
+  // switching back to open-mic.
+  aboveSince = 0;
+  belowSince = 0;
+  console.log('[rocky] mode=', m);
+}
+
 async function init() {
   setStatus('idle');
   talkBtn.addEventListener('click', onTalkClick);
+  // Wire the mode toggle and apply persisted preference.
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+  setMode(mode);
   // Try to acquire media eagerly; if the user hasn't granted yet, this
   // triggers the browser permission prompt. If it succeeds, we go to ready.
   if (await ensureMedia()) {
@@ -107,6 +129,10 @@ function meterTick() {
   meterEl.style.height = pct + '%';
 
   const now = performance.now();
+
+  // Auto features only apply in open-mic mode. Push-to-talk relies entirely
+  // on the TALK button.
+  if (mode !== 'open') return;
 
   if (state === 'ready') {
     // Auto-start recording when the user starts talking.
