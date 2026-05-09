@@ -20,7 +20,9 @@ LIVE_MODEL = "gemini-2.5-flash-live-preview"  # verify at smoke time
 
 class GeminiBrain:
     def __init__(self,
-                 system_prompt: str,
+                 system_prompt_template: str,
+                 vocab_provider,                       # callable -> list[str]
+                 learn_word_handler,                   # async (word, desc) -> None
                  on_audio_out: Callable[[bytes], Awaitable[None]],
                  on_text_out: Callable[[str], Awaitable[None]] | None = None,
                  voice: str = "Puck") -> None:
@@ -28,16 +30,34 @@ class GeminiBrain:
         self._client = genai.Client(api_key=api_key)
         self._on_audio_out = on_audio_out
         self._on_text_out = on_text_out
-        self._system_prompt = system_prompt
+        self._template = system_prompt_template
+        self._vocab_provider = vocab_provider
+        self._learn_word_handler = learn_word_handler
         self._voice = voice
         self._session = None
         self._send_queue: asyncio.Queue = asyncio.Queue()
         self._tasks: list[asyncio.Task] = []
 
     async def start(self) -> None:
+        prompt = self._template.format(vocab=", ".join(self._vocab_provider()))
+        learn_tool = types.Tool(function_declarations=[types.FunctionDeclaration(
+            name="learn_word",
+            description="Add a word to Rocky's vocabulary after the human teaches it.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "word": types.Schema(type=types.Type.STRING,
+                                         description="The new word, e.g. 'PEN'."),
+                    "description": types.Schema(type=types.Type.STRING,
+                                                description="One sentence about what was shown."),
+                },
+                required=["word", "description"],
+            ),
+        )])
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
-            system_instruction=types.Content(parts=[types.Part(text=self._system_prompt)]),
+            system_instruction=types.Content(parts=[types.Part(text=prompt)]),
+            tools=[learn_tool],
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self._voice)
@@ -88,12 +108,23 @@ class GeminiBrain:
     async def _receiver(self) -> None:
         try:
             async for resp in self._session.receive():
-                # Audio
                 if resp.data:
                     await self._on_audio_out(resp.data)
-                # Text (used for tool args / debug)
                 if resp.text and self._on_text_out:
                     await self._on_text_out(resp.text)
-                # Tool calls handled in Task 7
+                tool_call = getattr(resp, "tool_call", None)
+                if tool_call:
+                    for fc in tool_call.function_calls:
+                        if fc.name == "learn_word":
+                            args = fc.args or {}
+                            await self._learn_word_handler(
+                                args.get("word", ""), args.get("description", "")
+                            )
+                            await self._session.send_tool_response(
+                                function_responses=[types.FunctionResponse(
+                                    id=fc.id, name="learn_word",
+                                    response={"ok": True},
+                                )]
+                            )
         except Exception:
             log.exception("receive failed")
