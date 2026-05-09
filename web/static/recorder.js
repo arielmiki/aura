@@ -138,18 +138,55 @@ function startRecording() {
     return;
   }
   recordedChunks = [];
-  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-    .find((m) => MediaRecorder.isTypeSupported(m)) || '';
+
+  // Build an audio-only MediaStream. Some browsers reject start() if the
+  // MediaRecorder is given a stream containing video tracks but configured
+  // with an audio-only mimeType.
+  const audioTracks = mediaStream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    console.error('[rocky] no audio tracks in mediaStream');
+    setStatus('ready');
+    return;
+  }
+  const audioOnly = new MediaStream(audioTracks);
+
+  // Pick a MIME type the browser supports.
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mpeg',
+    '',  // browser default
+  ];
+  let mime = '';
+  for (const m of candidates) {
+    if (m === '' || MediaRecorder.isTypeSupported(m)) { mime = m; break; }
+  }
+  console.log('[rocky] starting MediaRecorder with mime=', JSON.stringify(mime));
+
   try {
-    recorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+    recorder = new MediaRecorder(audioOnly, mime ? { mimeType: mime } : undefined);
   } catch (e) {
     console.error('[rocky] MediaRecorder construct failed', e);
+    setStatus('ready');
     return;
   }
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
-  recorder.start();
+  recorder.onerror = (e) => {
+    console.error('[rocky] MediaRecorder error', e);
+    setStatus('ready');
+  };
+  try {
+    recorder.start();
+  } catch (e) {
+    console.error('[rocky] MediaRecorder.start failed', e);
+    setStatus('ready');
+    return;
+  }
   recordingStart = performance.now();
   belowSince = 0;
   setStatus('recording');
