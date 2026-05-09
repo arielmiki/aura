@@ -116,17 +116,24 @@ class CameraService:
     def motion_score(self) -> float:
         return self._motion_score
 
+    def _capture_and_encode(self) -> tuple[np.ndarray, bytes, float]:
+        """Blocking work — runs in a worker thread so it doesn't starve the loop."""
+        arr = self._backend.capture_array()
+        buf = io.BytesIO()
+        Image.fromarray(arr).save(buf, format="JPEG", quality=70)
+        motion = 0.0
+        if self._prev_array is not None and self._prev_array.shape == arr.shape:
+            diff = np.abs(arr.astype(np.int16) - self._prev_array.astype(np.int16))
+            motion = float(diff.mean())
+        return arr, buf.getvalue(), motion
+
     async def _loop(self) -> None:
         period = 1.0 / self._fps
         while True:
             try:
-                arr = self._backend.capture_array()
-                buf = io.BytesIO()
-                Image.fromarray(arr).save(buf, format="JPEG", quality=80)
-                self._latest_jpeg = buf.getvalue()
-                if self._prev_array is not None and self._prev_array.shape == arr.shape:
-                    diff = np.abs(arr.astype(np.int16) - self._prev_array.astype(np.int16))
-                    self._motion_score = float(diff.mean())
+                arr, jpg, motion = await asyncio.to_thread(self._capture_and_encode)
+                self._latest_jpeg = jpg
+                self._motion_score = motion
                 self._prev_array = self._latest_array
                 self._latest_array = arr
             except Exception:

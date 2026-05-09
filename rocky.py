@@ -84,7 +84,7 @@ async def amain() -> None:
                 gate.note_user_audio()
             now = asyncio.get_event_loop().time()
             jpg = cam.latest_jpeg()
-            if jpg and now - last_frame_time > 1.0:
+            if jpg and now - last_frame_time > 3.0:
                 await brain.send_image_jpeg(jpg)
                 last_frame_time = now
 

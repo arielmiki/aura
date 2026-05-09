@@ -35,8 +35,9 @@ class GeminiBrain:
         self._learn_word_handler = learn_word_handler
         self._voice = voice
         self._session = None
-        self._send_queue: asyncio.Queue = asyncio.Queue()
+        self._send_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
         self._tasks: list[asyncio.Task] = []
+        self._alive = False
 
     async def start(self) -> None:
         prompt = self._template.format(vocab=", ".join(self._vocab_provider()))
@@ -66,6 +67,7 @@ class GeminiBrain:
         )
         self._cm = self._client.aio.live.connect(model=LIVE_MODEL, config=config)
         self._session = await self._cm.__aenter__()
+        self._alive = True
         self._tasks.append(asyncio.create_task(self._sender()))
         self._tasks.append(asyncio.create_task(self._receiver()))
         log.info("gemini live session started")
@@ -88,6 +90,8 @@ class GeminiBrain:
     async def _sender(self) -> None:
         while True:
             kind, payload = await self._send_queue.get()
+            if not self._alive:
+                continue  # drop quietly while session is dead
             try:
                 if kind == "audio":
                     await self._session.send_realtime_input(
@@ -102,12 +106,16 @@ class GeminiBrain:
                         turns=types.Content(parts=[types.Part(text=payload)]),
                         turn_complete=True,
                     )
-            except Exception:
-                log.exception("send failed")
+            except Exception as e:
+                if self._alive:
+                    log.warning("send failed (%s) — marking session dead", type(e).__name__)
+                    self._alive = False
 
     async def _receiver(self) -> None:
         try:
             async for resp in self._session.receive():
+                if not self._alive:
+                    break
                 if resp.data:
                     await self._on_audio_out(resp.data)
                 if resp.text and self._on_text_out:
@@ -126,5 +134,7 @@ class GeminiBrain:
                                     response={"ok": True},
                                 )]
                             )
-        except Exception:
-            log.exception("receive failed")
+        except Exception as e:
+            if self._alive:
+                log.warning("receive failed (%s) — marking session dead", type(e).__name__)
+                self._alive = False
