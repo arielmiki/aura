@@ -108,7 +108,8 @@ class Brain:
                       memories: list[str],
                       conversation: list[dict],
                       patterns: str = "",
-                      adapted_knowledge: str = "") -> str:
+                      adapted_knowledge: str = "",
+                      inline_recall: list[str] = None) -> str:
         """One conversational turn. Returns Rocky's reply text.
 
         memories: list of fact strings, most recent last.
@@ -124,8 +125,14 @@ class Brain:
             adapted_knowledge=adapted_knowledge or "(none yet)",
         )
 
-        # Build the user turn: text + optional image
-        parts: list[types.Part] = [types.Part(text=transcript)]
+        # Build the user turn: optional inline memory recap + text + image.
+        # The recap is injected *with* the user's message so Gemini can't
+        # ignore it the way it sometimes does with long system prompts.
+        parts: list[types.Part] = []
+        if inline_recall:
+            recap = "(You remember: " + "; ".join(inline_recall) + ")"
+            parts.append(types.Part(text=recap))
+        parts.append(types.Part(text=transcript))
         if image_jpeg:
             parts.append(types.Part(inline_data=types.Blob(
                 data=image_jpeg, mime_type="image/jpeg",

@@ -71,22 +71,35 @@ class MemoryStore:
         return p if p.exists() else None
 
     def recall(self, query: str) -> Optional[dict]:
-        """Find the entry whose fact best matches `query`. Cheap substring
-        scoring — the longest run of overlapping lowercase words wins.
-        Returns the full entry dict, or None if no decent match."""
+        """Find the single best-matching memory."""
+        scored = self._scored_recall(query)
+        return scored[0][0] if scored else None
+
+    def relevant(self, query: str, top_k: int = 3) -> list[dict]:
+        """Return up to `top_k` memories whose facts overlap with `query`,
+        most relevant first. Used to compose an inline recap for each user
+        turn so the model is forced to look at memory."""
+        return [entry for entry, _score in self._scored_recall(query)[:top_k]]
+
+    def _scored_recall(self, query: str) -> list[tuple[dict, int]]:
         if not query:
-            return None
-        q_words = {w for w in query.lower().split() if len(w) >= 3}
+            return []
+        q_words = {w.strip(".,!?-—()'\"").lower()
+                   for w in query.split() if len(w) >= 3}
+        # Drop common stop words to avoid matching on "the" / "and"
+        q_words -= {"the", "and", "you", "for", "what", "does", "about",
+                    "this", "that", "your", "have", "with", "name"}
         if not q_words:
-            return None
-        best, best_score = None, 0
+            return []
+        scored = []
         for entry in self._entries:
-            fact_words = {w.strip(".,!?-—()'\"") for w in entry["fact"].lower().split()}
+            fact_words = {w.strip(".,!?-—()'\"").lower()
+                          for w in entry["fact"].split()}
             score = len(q_words & fact_words)
-            if score > best_score:
-                best_score = score
-                best = entry
-        return best if best_score > 0 else None
+            if score > 0:
+                scored.append((entry, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored
 
     def replace_all(self, new_entries: Iterable[dict]) -> None:
         """Used by background compaction to swap out the entire memory list."""

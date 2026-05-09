@@ -161,7 +161,13 @@ def make_app(memory: MemoryStore,
         except Exception:
             log.exception("pattern detection failed")
 
-        # 2. Brain
+        # 2. Brain — compute a small inline recap of memories most relevant
+        # to this transcript. These get injected with the user's message so
+        # Gemini cannot ignore them the way it sometimes does with long
+        # system prompts.
+        recall_hits = memory.relevant(transcript, top_k=3)
+        inline_recall = [e["fact"] for e in recall_hits] if recall_hits else None
+
         try:
             reply = await brain.respond(
                 transcript=transcript,
@@ -170,6 +176,7 @@ def make_app(memory: MemoryStore,
                 conversation=conversation.recent(10),
                 patterns=patterns.render_for_prompt(),
                 adapted_knowledge=adapter.render_for_prompt(),
+                inline_recall=inline_recall,
             )
         except Exception:
             log.exception("Brain failed")
