@@ -31,13 +31,13 @@ let recordingStart = 0;
 
 // Mode: 'open' (hands-free auto-start + auto-submit) | 'ptt' (TALK button only)
 const MODE_KEY = 'rocky.mode';
+const THRESHOLD_KEY = 'rocky.threshold';
 let mode = localStorage.getItem(MODE_KEY) || 'open';
 
 const SILENCE_AUTO_SUBMIT_MS = 1000;  // stop after 1s of quiet
 const SPEECH_START_MS = 250;          // start after 250ms of sound
 const MIN_RECORDING_MS = 500;
-const SPEECH_THRESHOLD = 0.02;        // RMS threshold; raised slightly so
-                                      // ambient noise doesn't auto-trigger
+let speechThreshold = parseFloat(localStorage.getItem(THRESHOLD_KEY)) || 0.02;
 const METER_INTERVAL_MS = 50;
 
 function setStatus(s) {
@@ -248,11 +248,24 @@ function setMode(m) {
   document.querySelectorAll('.mode-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === m);
   });
+  // Toggle a class on the controls panel so the threshold slider can
+  // dim/disable visually when push-to-talk is on.
+  const lc = document.querySelector('.left-controls');
+  if (lc) lc.classList.toggle('ptt', m === 'ptt');
   // Reset VAD timers so a stale aboveSince doesn't immediately fire when
   // switching back to open-mic.
   aboveSince = 0;
   belowSince = 0;
   console.log('[rocky] mode=', m);
+}
+
+function setThreshold(v) {
+  speechThreshold = Math.max(0.001, Math.min(0.5, parseFloat(v) || 0.02));
+  localStorage.setItem(THRESHOLD_KEY, speechThreshold);
+  const slider = document.getElementById('threshold-slider');
+  const val = document.getElementById('threshold-val');
+  if (slider) slider.value = speechThreshold;
+  if (val) val.textContent = speechThreshold.toFixed(3);
 }
 
 async function init() {
@@ -263,6 +276,12 @@ async function init() {
     btn.addEventListener('click', () => setMode(btn.dataset.mode));
   });
   setMode(mode);
+  // Wire the sensitivity slider.
+  const slider = document.getElementById('threshold-slider');
+  if (slider) {
+    slider.addEventListener('input', (e) => setThreshold(e.target.value));
+    setThreshold(speechThreshold);
+  }
   // Try to acquire media eagerly; if the user hasn't granted yet, this
   // triggers the browser permission prompt. If it succeeds, we go to ready.
   if (await ensureMedia()) {
@@ -294,7 +313,7 @@ function meterTick() {
 
   if (state === 'ready') {
     // Auto-start recording when the user starts talking.
-    if (level > SPEECH_THRESHOLD) {
+    if (level > speechThreshold) {
       aboveSince ||= now;
       if (now - aboveSince > SPEECH_START_MS) {
         startRecording();
@@ -304,7 +323,7 @@ function meterTick() {
     }
   } else if (state === 'recording') {
     // Auto-submit on sustained silence.
-    if (level < SPEECH_THRESHOLD) {
+    if (level < speechThreshold) {
       belowSince ||= now;
       if (now - belowSince > SILENCE_AUTO_SUBMIT_MS &&
           now - recordingStart > MIN_RECORDING_MS) {

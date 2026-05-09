@@ -542,6 +542,68 @@
   .memory:active { transform: scale(0.98); }
   .memory.no-image { cursor: default; }
   .memory.no-image:active { transform: none; }
+
+  /* Left pane controls: mode toggle + threshold slider */
+  .left-controls {
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .left-controls .mode-toggle {
+    margin-left: 0;  /* override the header's auto-margin */
+    width: 100%;
+  }
+  .left-controls .mode-toggle .mode-btn { flex: 1 1 50%; text-align: center; }
+
+  .threshold-row {
+    display: flex; flex-direction: column; gap: 6px;
+    transition: opacity 0.2s, height 0.2s;
+  }
+  .left-controls.ptt .threshold-row {
+    opacity: 0.4; pointer-events: none;
+  }
+  .threshold-label {
+    display: flex; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.2em; color: var(--muted);
+  }
+  .threshold-val {
+    color: var(--cyan); font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .threshold-tick {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: var(--muted); opacity: 0.7;
+  }
+  #threshold-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%; height: 6px;
+    background: linear-gradient(90deg, var(--green) 0%, var(--amber) 50%, var(--magenta) 100%);
+    border-radius: 99px; outline: none; opacity: 0.85;
+    margin: 4px 0;
+  }
+  #threshold-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--cyan);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(90,216,255,0.6);
+  }
+  #threshold-slider::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--cyan);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(90,216,255,0.6);
+  }
 </style>
 </head>
 <body>
@@ -550,10 +612,6 @@
       <div class="header">
         <div class="brand">ROCKY</div>
         <div id="status" class="pill status-idle">idle</div>
-        <div class="mode-toggle">
-          <button class="mode-btn active" data-mode="open">OPEN MIC</button>
-          <button class="mode-btn" data-mode="ptt">PUSH TO TALK</button>
-        </div>
         <div class="corpus-mini" id="corpus-mini" title="Adaption Labs auto-runs every 5 turns">
           <span class="corpus-mini-label">CORPUS</span>
           <span class="corpus-mini-count" id="corpus-turns">0</span>
@@ -562,7 +620,24 @@
       </div>
     </header>
 
-    <section class="conversation-pane">
+    <section class="conversation-pane" id="left-pane">
+      <div class="left-controls">
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="open">OPEN MIC</button>
+          <button class="mode-btn" data-mode="ptt">PUSH TO TALK</button>
+        </div>
+        <div class="threshold-row" id="threshold-row">
+          <div class="threshold-label">
+            <span>SENSITIVITY</span>
+            <span class="threshold-val" id="threshold-val">0.020</span>
+          </div>
+          <input type="range" id="threshold-slider"
+                 min="0.005" max="0.1" step="0.005" value="0.02">
+          <div class="threshold-tick">
+            <span>more sensitive</span><span>less sensitive</span>
+          </div>
+        </div>
+      </div>
       <h2 style="padding: 0 4px">CONVERSATION</h2>
       <div class="transcript" id="transcript">
         <div class="empty">Allow camera + microphone, click TALK, say hello.</div>
