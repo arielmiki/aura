@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from adapt import Adapter
 from conversation import ConversationLog
 from llm import Brain
 from memory import MemoryStore
@@ -24,6 +25,7 @@ load_dotenv()
 memory = MemoryStore(path=Path("memories.json"))
 conversation = ConversationLog(path=Path("conversation.json"), max_turns=20)
 patterns = PatternStore(path=Path("patterns.json"))
+adapter = Adapter(blueprint_path=Path("prompts/rocky_system.md"))
 stt = STT()
 tts = TTS()
 prompt = Path("prompts/rocky_system.md").read_text()
@@ -33,4 +35,4 @@ async def _on_remember(fact: str, image_jpeg=None):
 
 brain = Brain(prompt, on_remember=_on_remember)
 
-app = make_app(memory, conversation, patterns, brain, stt, tts)
+app = make_app(memory, conversation, patterns, adapter, brain, stt, tts)

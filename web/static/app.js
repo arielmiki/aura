@@ -104,9 +104,83 @@ function pulseAdaptCard() {
   adaptPulseEl.classList.add('flash');
 }
 
+// ---------------- Adaption Labs corpus card ----------------
+
+const corpusStatusEl = document.getElementById('corpus-status');
+const corpusTurnsEl  = document.getElementById('corpus-turns');
+const corpusRowsEl   = document.getElementById('corpus-rows');
+const corpusIdEl     = document.getElementById('corpus-id');
+const adaptBtn       = document.getElementById('adapt-btn');
+
+let lastTurnCount = 0;
+
+function setCorpusStatus(status) {
+  if (!corpusStatusEl) return;
+  corpusStatusEl.textContent = status || 'idle';
+  corpusStatusEl.className = 'corpus-status ' + (status || 'idle');
+  // Disable the button while a run is mid-flight to avoid duplicate uploads.
+  if (adaptBtn) {
+    const inFlight = status === 'uploading' || status === 'running';
+    adaptBtn.disabled = inFlight;
+    adaptBtn.textContent = inFlight ? status.toUpperCase() + '…' : 'ADAPT NOW';
+  }
+}
+
+function renderCorpus(state, turnCount) {
+  if (!state) return;
+  setCorpusStatus(state.status);
+  if (turnCount !== undefined) {
+    lastTurnCount = turnCount;
+    corpusTurnsEl.textContent = String(turnCount);
+  }
+  corpusRowsEl.textContent = state.row_count
+    ? `${state.row_count} rows`
+    : '—';
+  corpusIdEl.textContent = state.dataset_id
+    ? state.dataset_id.slice(0, 12) + '…'
+    : '—';
+}
+
+if (adaptBtn) {
+  adaptBtn.addEventListener('click', async () => {
+    setCorpusStatus('uploading');
+    try {
+      const r = await fetch('/api/adapt', { method: 'POST' });
+      const j = await r.json();
+      if (j.error) {
+        console.error('[adapt] error:', j.error);
+        setCorpusStatus('failed');
+      } else if (j.state) {
+        renderCorpus(j.state);
+      }
+    } catch (e) {
+      console.error('[adapt] request failed', e);
+      setCorpusStatus('failed');
+    }
+  });
+}
+
+// While running, poll status every 4 s so the UI updates without a refresh.
+setInterval(async () => {
+  if (corpusStatusEl?.textContent !== 'running' &&
+      corpusStatusEl?.textContent !== 'uploading') return;
+  try {
+    const r = await fetch('/api/adapt/refresh', { method: 'POST' });
+    const j = await r.json();
+    if (j.state) renderCorpus(j.state);
+  } catch (_) {}
+}, 4000);
+
 // Expose for recorder.js (keeps the existing call signature)
 window.rocky = {
-  setTranscript: appendTurn,
+  setTranscript: (you, rocky) => {
+    appendTurn(you, rocky);
+    // Increment the corpus turn count locally so the UI updates immediately.
+    if (corpusTurnsEl) {
+      lastTurnCount += 1;
+      corpusTurnsEl.textContent = String(lastTurnCount);
+    }
+  },
 };
 
 const ws = new WebSocket(
@@ -118,6 +192,13 @@ ws.onmessage = (msg) => {
   if (data.type === 'snapshot') {
     renderMemories(data.entries);
     renderPatterns(data.patterns, false);
+    renderCorpus(data.adapt, data.turn_count);
+    if (data.adapt_configured === false && adaptBtn) {
+      adaptBtn.disabled = true;
+      adaptBtn.textContent = 'NOT CONFIGURED';
+    }
+  } else if (data.type === 'adapt_status') {
+    renderCorpus(data.state);
   } else if (data.type === 'memory_added') {
     fetch('/api/memories').then(r => r.json()).then(j => {
       renderMemories(j.entries, data.entry.id);

@@ -32,6 +32,7 @@ STATIC = Path(__file__).parent / "static"
 def make_app(memory: MemoryStore,
              conversation: ConversationLog,
              patterns,
+             adapter,
              brain: Brain,
              stt: STT,
              tts: TTS) -> FastAPI:
@@ -51,6 +52,28 @@ def make_app(memory: MemoryStore,
     async def api_patterns():
         return patterns.state()
 
+    @app.get("/api/adapt")
+    async def api_adapt_get():
+        return {"state": adapter.state(), "configured": adapter.configured,
+                "turn_count": len(conversation.turns())}
+
+    @app.post("/api/adapt")
+    async def api_adapt_post():
+        if not adapter.configured:
+            return {"error": "ADAPTION_API_KEY not set"}
+        try:
+            state = await adapter.adapt(conversation.turns())
+            return {"state": state}
+        except Exception as e:
+            log.exception("adapt failed")
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    @app.post("/api/adapt/refresh")
+    async def api_adapt_refresh():
+        if not adapter.configured:
+            return {"error": "ADAPTION_API_KEY not set"}
+        return {"state": await adapter.refresh()}
+
     @app.get("/memory/image/{entry_id}")
     async def memory_image(entry_id: str):
         # Strict id format guard — entry ids are 8-char uuid hex prefixes.
@@ -66,31 +89,38 @@ def make_app(memory: MemoryStore,
         await websocket.accept()
         memq = await memory.subscribe()
         patq = await patterns.subscribe()
+        adaq = await adapter.subscribe()
         await websocket.send_text(json.dumps({
             "type": "snapshot",
             "entries": memory.entries(),
             "patterns": patterns.state(),
+            "adapt": adapter.state(),
+            "turn_count": len(conversation.turns()),
+            "adapt_configured": adapter.configured,
         }))
 
         async def fan_in():
-            # Race the two queues; whichever has an event first wins.
-            mem_task = asyncio.create_task(memq.get())
-            pat_task = asyncio.create_task(patq.get())
+            tasks = {
+                "mem": asyncio.create_task(memq.get()),
+                "pat": asyncio.create_task(patq.get()),
+                "ada": asyncio.create_task(adaq.get()),
+            }
             try:
                 while True:
                     done, _ = await asyncio.wait(
-                        {mem_task, pat_task},
+                        set(tasks.values()),
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     for t in done:
                         ev = t.result()
                         await websocket.send_text(json.dumps(ev))
-                        if t is mem_task:
-                            mem_task = asyncio.create_task(memq.get())
-                        else:
-                            pat_task = asyncio.create_task(patq.get())
+                        # respawn the corresponding queue waiter
+                        for k, v in list(tasks.items()):
+                            if v is t:
+                                src = {"mem": memq, "pat": patq, "ada": adaq}[k]
+                                tasks[k] = asyncio.create_task(src.get())
             finally:
-                for t in (mem_task, pat_task):
+                for t in tasks.values():
                     t.cancel()
 
         try:
@@ -100,6 +130,7 @@ def make_app(memory: MemoryStore,
         finally:
             memory.unsubscribe(memq)
             patterns.unsubscribe(patq)
+            adapter.unsubscribe(adaq)
 
     @app.post("/turn")
     async def turn(audio: UploadFile = File(...),
