@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Rocky</title>
+<title>Companion</title>
 <style>
   :root {
     color-scheme: dark;
@@ -183,13 +183,106 @@
     z-index: -1;
   }
 
-  /* Visualizer canvas */
-  #viz {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
   .stage { min-height: 320px; }
+
+  /* Avatar wrap — holds both characters; only the active one is shown */
+  .avatar-wrap {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .avatar {
+    width: min(70%, 520px);
+    height: auto;
+    max-height: 90%;
+    display: none;
+  }
+  .avatar-wrap[data-character="rocky"] .avatar-rocky { display: block; }
+  .avatar-wrap[data-character="hana"]  .avatar-hana  { display: block; }
+
+  /* Avatar parts — overridden per emotion */
+  .avatar .halo {
+    transform-origin: 160px 160px;
+    animation: halo-breathe 4s ease-in-out infinite;
+  }
+  @keyframes halo-breathe {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50%      { opacity: 1.0; transform: scale(1.04); }
+  }
+
+  .avatar .eye .pupil { transition: rx 0.25s, ry 0.25s, opacity 0.25s; }
+  .avatar .eye .lid   { transition: ry 0.25s; }
+  .avatar .brow       { transition: transform 0.3s; }
+  .avatar .mouth-group {
+    transition: transform 0.18s;
+    --mouth-open: 1;
+    transform: scaleY(var(--mouth-open));
+  }
+  .avatar .blush      { transition: opacity 0.3s; }
+
+  /* Idle blink loop */
+  .avatar .lid { animation: blink 5.5s steps(1) infinite; }
+  @keyframes blink {
+    0%, 92%, 100% { ry: 0; }
+    94%, 96%      { ry: 26; }   /* eyelid down briefly */
+  }
+
+  /* Emotions — modify pupils, lids, brows, mouth shape */
+  .avatar-wrap[data-emotion="happy"] .pupil  { ry: 6; }
+  .avatar-wrap[data-emotion="happy"] .brow   { transform: translateY(-3px); }
+  .avatar-wrap[data-emotion="happy"] .mouth-group { transform: scale(1.1, 1.4); }
+
+  .avatar-wrap[data-emotion="amaze"] .pupil  { rx: 14; ry: 14; }
+  .avatar-wrap[data-emotion="amaze"] .brow   { transform: translateY(-8px); }
+  .avatar-wrap[data-emotion="amaze"] .avatar-rocky .mouth { ry: 16; }
+  .avatar-wrap[data-emotion="amaze"] .avatar-hana .mouth  { d: path("M 142 232 Q 160 260 178 232 Q 160 244 142 232 Z"); }
+  .avatar-wrap[data-emotion="amaze"] .halo   { animation-duration: 1.6s; }
+
+  .avatar-wrap[data-emotion="curious"] .brow-left  { transform: translateY(-6px) rotate(-6deg); }
+  .avatar-wrap[data-emotion="curious"] .brow-right { transform: translateY(2px) rotate(-3deg); }
+  .avatar-wrap[data-emotion="curious"] .avatar     { transform: rotate(-3deg); }
+
+  .avatar-wrap[data-emotion="sad"] .pupil { ry: 6; opacity: 0.6; }
+  .avatar-wrap[data-emotion="sad"] .brow-left  { transform: translateY(2px) rotate(-12deg); }
+  .avatar-wrap[data-emotion="sad"] .brow-right { transform: translateY(2px) rotate(12deg); }
+  .avatar-wrap[data-emotion="sad"] .avatar-rocky .mouth { ry: 3; transform: translateY(8px); }
+  .avatar-wrap[data-emotion="sad"] .avatar-hana .mouth  { d: path("M 145 240 Q 160 230 175 240"); }
+
+  .avatar-wrap[data-emotion="confused"] .brow-left  { transform: translateY(-4px) rotate(-12deg); }
+  .avatar-wrap[data-emotion="confused"] .brow-right { transform: translateY(2px) rotate(8deg); }
+
+  .avatar-wrap[data-emotion="sleepy"] .lid { ry: 18 !important; animation: none; }
+  .avatar-wrap[data-emotion="sleepy"] .pupil { opacity: 0.5; }
+  .avatar-wrap[data-emotion="sleepy"] .brow { transform: translateY(4px); }
+
+  .avatar-wrap[data-emotion="thinking"] .pupil { transform: translate(4px, -3px); }
+  .avatar-wrap[data-emotion="thinking"] .brow-left  { transform: translateY(-4px) rotate(8deg); }
+
+  /* Character picker in the header */
+  .char-picker {
+    display: inline-flex;
+    border: 1px solid var(--panel-border);
+    border-radius: 99px;
+    padding: 3px;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+    margin-left: 8px;
+  }
+  .char-btn {
+    padding: 5px 14px;
+    background: transparent; border: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11px; letter-spacing: 0.18em;
+    cursor: pointer; border-radius: 99px;
+    transition: all 0.2s;
+  }
+  .char-btn:hover { color: var(--text); }
+  .char-btn.active {
+    background: linear-gradient(135deg, rgba(90,216,255,0.2), rgba(255,90,216,0.15));
+    color: var(--cyan);
+    box-shadow: 0 0 12px rgba(90,216,255,0.3);
+  }
 
   /* Camera thumbnail */
   .cam-thumb {
@@ -680,10 +773,13 @@
   <div class="app">
     <header class="topbar">
       <div class="header">
-        <div class="brand">ROCKY</div>
+        <div class="brand">COMPANION</div>
         <div id="status" class="pill status-idle">idle</div>
+        <div class="char-picker" id="char-picker">
+          <!-- populated by app.js from /api/characters -->
+        </div>
         <button class="corpus-mini" id="corpus-btn"
-                title="Click to run an Adaption Labs adapt cycle now (3 categories: chat, memories, patterns). Auto-runs every 30 turns; unchanged categories are skipped.">
+                title="Click to run an Adaption Labs adapt cycle now. Auto-runs every 30 turns; unchanged categories are skipped.">
           <span class="corpus-mini-label">ADAPT</span>
           <span class="corpus-mini-count" id="corpus-turns">0</span>
           <span class="corpus-status" id="corpus-status">idle</span>
@@ -723,7 +819,101 @@
 
     <main class="stage-pane">
       <div class="stage">
-        <canvas id="viz"></canvas>
+        <div class="avatar-wrap" id="avatar-wrap" data-emotion="neutral" data-character="rocky">
+          <!-- ROCKY avatar -->
+          <svg class="avatar avatar-rocky" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Rocky">
+            <defs>
+              <radialGradient id="rocky-skin" cx="35%" cy="30%">
+                <stop offset="0%" stop-color="#9a8a76"/>
+                <stop offset="60%" stop-color="#5d4d3c"/>
+                <stop offset="100%" stop-color="#2e2419"/>
+              </radialGradient>
+              <radialGradient id="rocky-glow" cx="50%" cy="50%">
+                <stop offset="0%" stop-color="rgba(255,180,90,0.5)"/>
+                <stop offset="100%" stop-color="rgba(255,180,90,0)"/>
+              </radialGradient>
+            </defs>
+            <!-- ambient glow -->
+            <circle class="halo" cx="160" cy="160" r="150" fill="url(#rocky-glow)"/>
+            <!-- carapace head -->
+            <ellipse cx="160" cy="160" rx="120" ry="135" fill="url(#rocky-skin)" stroke="#1a120a" stroke-width="3"/>
+            <!-- carapace ridges -->
+            <path d="M 60 120 Q 160 80 260 120" fill="none" stroke="#3a2c1d" stroke-width="2" opacity="0.6"/>
+            <path d="M 70 200 Q 160 220 250 200" fill="none" stroke="#3a2c1d" stroke-width="2" opacity="0.6"/>
+            <!-- eyes (left + right) — round black with yellow glow -->
+            <g class="eye eye-left">
+              <ellipse cx="115" cy="150" rx="22" ry="22" fill="#0a0a0a" stroke="#ffb24a" stroke-width="2"/>
+              <ellipse class="pupil" cx="115" cy="150" rx="9" ry="9" fill="#ffd47a"/>
+              <ellipse class="lid" cx="115" cy="150" rx="24" ry="0" fill="#3a2c1d"/>
+            </g>
+            <g class="eye eye-right">
+              <ellipse cx="205" cy="150" rx="22" ry="22" fill="#0a0a0a" stroke="#ffb24a" stroke-width="2"/>
+              <ellipse class="pupil" cx="205" cy="150" rx="9" ry="9" fill="#ffd47a"/>
+              <ellipse class="lid" cx="205" cy="150" rx="24" ry="0" fill="#3a2c1d"/>
+            </g>
+            <!-- eyebrows / brow ridges -->
+            <path class="brow brow-left" d="M 88 115 L 142 115" stroke="#1a120a" stroke-width="6" stroke-linecap="round"/>
+            <path class="brow brow-right" d="M 178 115 L 232 115" stroke="#1a120a" stroke-width="6" stroke-linecap="round"/>
+            <!-- mouth — a horizontal slit that scales vertically for talk -->
+            <g class="mouth-group" transform-origin="160 235">
+              <ellipse class="mouth" cx="160" cy="235" rx="42" ry="6" fill="#1a0e06" stroke="#3a2c1d" stroke-width="2"/>
+            </g>
+          </svg>
+
+          <!-- HANA avatar (anime girl) -->
+          <svg class="avatar avatar-hana" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg" aria-label="Hana">
+            <defs>
+              <radialGradient id="hana-skin" cx="50%" cy="40%">
+                <stop offset="0%" stop-color="#fff6ee"/>
+                <stop offset="100%" stop-color="#ffd9c2"/>
+              </radialGradient>
+              <radialGradient id="hana-glow" cx="50%" cy="50%">
+                <stop offset="0%" stop-color="rgba(255,170,210,0.45)"/>
+                <stop offset="100%" stop-color="rgba(255,170,210,0)"/>
+              </radialGradient>
+              <linearGradient id="hana-hair" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#d99c7e"/>
+                <stop offset="100%" stop-color="#a06854"/>
+              </linearGradient>
+            </defs>
+            <circle class="halo" cx="160" cy="160" r="150" fill="url(#hana-glow)"/>
+            <!-- back hair -->
+            <ellipse cx="160" cy="180" rx="110" ry="130" fill="url(#hana-hair)"/>
+            <!-- face -->
+            <ellipse cx="160" cy="170" rx="92" ry="105" fill="url(#hana-skin)" stroke="#c98a72" stroke-width="2"/>
+            <!-- bangs -->
+            <path d="M 70 105 Q 100 60 160 70 Q 220 60 250 105 Q 240 130 200 120 Q 180 130 160 120 Q 140 130 120 120 Q 80 130 70 105 Z"
+                  fill="url(#hana-hair)" stroke="#7a4a3a" stroke-width="1"/>
+            <!-- side hair strands -->
+            <path d="M 70 130 Q 60 220 80 280" fill="url(#hana-hair)" stroke="#7a4a3a" stroke-width="1"/>
+            <path d="M 250 130 Q 260 220 240 280" fill="url(#hana-hair)" stroke="#7a4a3a" stroke-width="1"/>
+            <!-- blush -->
+            <ellipse class="blush blush-left" cx="115" cy="200" rx="14" ry="7" fill="rgba(255,140,170,0.55)"/>
+            <ellipse class="blush blush-right" cx="205" cy="200" rx="14" ry="7" fill="rgba(255,140,170,0.55)"/>
+            <!-- eyes — big anime style: white, then large iris, then highlight -->
+            <g class="eye eye-left">
+              <ellipse cx="120" cy="170" rx="22" ry="28" fill="#fff"/>
+              <ellipse class="pupil" cx="120" cy="172" rx="14" ry="20" fill="#5a3aa5"/>
+              <ellipse cx="120" cy="172" rx="6" ry="8" fill="#1a0e3a"/>
+              <ellipse cx="124" cy="166" rx="4" ry="5" fill="#ffffff"/>
+              <ellipse class="lid" cx="120" cy="170" rx="24" ry="0" fill="#ffd9c2"/>
+            </g>
+            <g class="eye eye-right">
+              <ellipse cx="200" cy="170" rx="22" ry="28" fill="#fff"/>
+              <ellipse class="pupil" cx="200" cy="172" rx="14" ry="20" fill="#5a3aa5"/>
+              <ellipse cx="200" cy="172" rx="6" ry="8" fill="#1a0e3a"/>
+              <ellipse cx="204" cy="166" rx="4" ry="5" fill="#ffffff"/>
+              <ellipse class="lid" cx="200" cy="170" rx="24" ry="0" fill="#ffd9c2"/>
+            </g>
+            <!-- eyebrows -->
+            <path class="brow brow-left" d="M 95 138 Q 120 130 145 138" stroke="#7a4a3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <path class="brow brow-right" d="M 175 138 Q 200 130 225 138" stroke="#7a4a3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <!-- mouth — small curve, scales for talk -->
+            <g class="mouth-group" transform-origin="160 235">
+              <path class="mouth" d="M 145 235 Q 160 245 175 235" stroke="#c54a7a" stroke-width="3" fill="rgba(255,160,180,0.4)" stroke-linecap="round"/>
+            </g>
+          </svg>
+        </div>
         <div class="cam-thumb">
           <video id="video" autoplay muted playsinline></video>
           <div class="cam-label">CAM</div>

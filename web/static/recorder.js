@@ -111,6 +111,7 @@ async function ensureMedia() {
 
   setInterval(meterTick, METER_INTERVAL_MS);
   startViz();
+  startLipSync();
   console.log('[rocky] media ready');
   return true;
 }
@@ -142,6 +143,38 @@ function startViz() {
   window.addEventListener('resize', fitCanvas);
   fitCanvas();
   requestAnimationFrame(drawViz);
+}
+
+// Lip-sync the avatar mouth to Rocky's TTS audio while it's playing. Reads
+// the ttsAnalyser amplitude every animation frame and sets a CSS variable
+// on the active avatar's .mouth-group element.
+function startLipSync() {
+  const wrap = document.getElementById('avatar-wrap');
+  if (!wrap || !ttsAnalyser) return;
+  const data = new Uint8Array(ttsAnalyser.fftSize);
+  function tick() {
+    requestAnimationFrame(tick);
+    if (!ttsAnalyser) return;
+    ttsAnalyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    // Map RMS to a mouth-open factor.
+    // While 'speaking' we drive it from audio amplitude; otherwise a small idle.
+    let target = 1;
+    if (state === 'speaking') {
+      target = Math.min(2.5, 1 + rms * 25);
+    } else {
+      target = 1;  // closed/neutral
+    }
+    wrap.querySelectorAll('.mouth-group').forEach((g) => {
+      g.style.setProperty('--mouth-open', target.toFixed(2));
+    });
+  }
+  tick();
 }
 
 const _vizFreq = new Uint8Array(128);
@@ -479,8 +512,13 @@ async function stopRecordingAndSubmit() {
 
   const transcript = response.headers.get('X-Transcript') || '';
   const reply = response.headers.get('X-Reply') || '';
+  const emotion = response.headers.get('X-Emotion') || 'neutral';
   console.log(`[rocky] heard: ${JSON.stringify(transcript)}`);
   console.log(`[rocky] reply: ${JSON.stringify(reply)}`);
+  console.log(`[rocky] emotion: ${emotion}`);
+  // Apply emotion to the avatar so it animates while the reply plays
+  const wrap = document.getElementById('avatar-wrap');
+  if (wrap) wrap.dataset.emotion = emotion;
   if (window.rocky) window.rocky.setTranscript(transcript, reply);
 
   const mp3 = await response.blob();
@@ -508,6 +546,9 @@ async function snapshotFrame() {
 
 audioEl.addEventListener('ended', () => {
   setStatus('ready');
+  // Return avatar to neutral after the reply finishes playing
+  const wrap = document.getElementById('avatar-wrap');
+  if (wrap) wrap.dataset.emotion = 'neutral';
 });
 
 init();

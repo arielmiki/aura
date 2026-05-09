@@ -36,7 +36,10 @@ def make_app(memory: MemoryStore,
              adapter,
              brain: Brain,
              stt: STT,
-             tts: TTS) -> FastAPI:
+             tts: TTS,
+             switch_character=None,
+             current_character_id=None,
+             characters_dict=None) -> FastAPI:
     app = FastAPI()
 
     @app.get("/")
@@ -48,6 +51,21 @@ def make_app(memory: MemoryStore,
     @app.get("/api/memories")
     async def api_memories():
         return {"entries": memory.entries()}
+
+    @app.get("/api/characters")
+    async def api_characters():
+        if not characters_dict:
+            return {"characters": [], "active": None}
+        return {
+            "characters": [c.to_dict() for c in characters_dict.values()],
+            "active": current_character_id() if current_character_id else None,
+        }
+
+    @app.post("/api/characters/{char_id}")
+    async def api_switch_character(char_id: str):
+        if not switch_character or not switch_character(char_id):
+            return {"ok": False, "error": "unknown character"}
+        return {"ok": True, "active": char_id}
 
     @app.get("/api/patterns")
     async def api_patterns():
@@ -214,15 +232,18 @@ def make_app(memory: MemoryStore,
                 adapter, conversation.turns(), memory.entries(), patterns.state()
             ))
 
-        # 4. TTS — Rocky's output is always English by policy (the persona
-        # prompt enforces this). Pin language_code='en' so the voice stays
-        # consistent even if Gemini accidentally drops in a foreign word.
+        # 4. TTS — output is always English by policy. Surface the
+        # emotion the brain set (default 'neutral') in the response so
+        # the avatar can animate accordingly.
+        emotion = getattr(brain, "last_emotion", "neutral")
         return StreamingResponse(
             _stream_tts(tts, reply, "en"),
             media_type="audio/mpeg",
             headers={"X-Transcript": _safe_header(transcript),
                      "X-Reply": _safe_header(reply),
-                     "X-Lang": "en"},
+                     "X-Lang": "en",
+                     "X-Emotion": emotion,
+                     "X-Character": current_character_id() if current_character_id else "rocky"},
         )
 
     return app

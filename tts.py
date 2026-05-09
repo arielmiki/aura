@@ -51,6 +51,9 @@ class TTS:
         self._client = ElevenLabs(api_key=api_key or os.environ["ELEVENLABS_API_KEY"])
         self._voice_id = voice_id or os.environ["ELEVENLABS_VOICE_ID"]
 
+    def set_voice(self, voice_id: str) -> None:
+        self._voice_id = voice_id
+
     def stream(self, text: str, language_code: Optional[str] = None) -> AsyncIterator[bytes]:
         """Returns an async iterator of MP3 byte chunks.
 

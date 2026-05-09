@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from adapt import Adapter
+from characters import CHARACTERS, DEFAULT_CHARACTER
 from conversation import ConversationLog
 from llm import Brain, caption_image
 from memory import MemoryStore
@@ -25,10 +26,13 @@ load_dotenv()
 memory = MemoryStore(path=Path("memories.json"))
 conversation = ConversationLog(path=Path("conversation.json"), max_turns=20)
 patterns = PatternStore(path=Path("patterns.json"))
-adapter = Adapter(blueprint_path=Path("prompts/rocky_system.md"))
+
+# Active character — shared across the process; switch via the API.
+active_character = CHARACTERS[DEFAULT_CHARACTER]
+adapter = Adapter(blueprint_path=active_character.prompt_path)
 stt = STT()
-tts = TTS()
-prompt = Path("prompts/rocky_system.md").read_text()
+tts = TTS(voice_id=active_character.voice_id)
+prompt = active_character.prompt()
 
 import asyncio
 import os
@@ -77,4 +81,24 @@ brain = Brain(
     on_recall_visual=_on_recall_visual,
 )
 
-app = make_app(memory, conversation, patterns, adapter, brain, stt, tts)
+
+def switch_character(char_id: str) -> bool:
+    """Hot-swap the active character: voice, persona prompt, blueprint."""
+    global active_character
+    if char_id not in CHARACTERS:
+        return False
+    active_character = CHARACTERS[char_id]
+    tts.set_voice(active_character.voice_id)
+    brain.set_template(active_character.prompt())
+    adapter.blueprint_path = active_character.prompt_path
+    logging.getLogger('rocky').info("switched to character: %s", char_id)
+    return True
+
+
+def current_character_id() -> str:
+    return active_character.id
+
+app = make_app(memory, conversation, patterns, adapter, brain, stt, tts,
+               switch_character=switch_character,
+               current_character_id=current_character_id,
+               characters_dict=CHARACTERS)

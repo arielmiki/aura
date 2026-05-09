@@ -59,6 +59,29 @@ RECALL_VISUAL_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration
 )])
 
 
+SET_EMOTION_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration(
+    name="set_emotion",
+    description=(
+        "Set your facial expression for THIS reply. Pick the emotion that "
+        "best matches what you're about to say. Call this BEFORE finishing "
+        "your reply so the avatar animates correctly while you speak."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "emotion": types.Schema(
+                type=types.Type.STRING,
+                description=(
+                    "One of: neutral | happy | amaze | curious | "
+                    "sad | confused | sleepy | thinking"
+                ),
+            ),
+        },
+        required=["emotion"],
+    ),
+)])
+
+
 async def caption_image(client, image_jpeg: bytes) -> str:
     """Ask Gemini Flash for a single-sentence visual description of an image.
     Used to enrich remember() facts so the saved memory carries visual context
@@ -95,6 +118,13 @@ class Brain:
         # Frame attached to the current turn — passed to remember() so the
         # memory keeps a snapshot of what was seen at that moment.
         self._current_image: Optional[bytes] = None
+        # Emotion the model called set_emotion with for the most recent turn.
+        # Cleared at the start of each respond(); read back by the server.
+        self.last_emotion: str = "neutral"
+
+    def set_template(self, prompt_template: str) -> None:
+        """Hot-swap the persona prompt (used when switching characters)."""
+        self._template = prompt_template
 
     @property
     def client(self):
@@ -143,9 +173,12 @@ class Brain:
         # Tool-call loop. The model may call remember() one or more times
         # before producing a final text reply. We cap at 4 iterations to
         # avoid infinite loops.
-        # Pick which tools are available this turn. Always include remember;
-        # include recall_visual only if rocky.py wired a callback for it.
-        tools = [REMEMBER_TOOL]
+        # Reset the emotion for this turn; set_emotion tool will update it.
+        self.last_emotion = "neutral"
+
+        # Pick which tools are available this turn. Always include remember
+        # and set_emotion; include recall_visual only if a callback is wired.
+        tools = [REMEMBER_TOOL, SET_EMOTION_TOOL]
         if self._on_recall_visual is not None:
             tools.append(RECALL_VISUAL_TOOL)
 
@@ -181,6 +214,17 @@ class Brain:
                         function_response=types.FunctionResponse(
                             name="remember",
                             response={"id": mid or "duplicate"},
+                        ),
+                    ))
+                elif fc.name == "set_emotion":
+                    emotion = (fc.args or {}).get("emotion", "neutral")
+                    valid = {"neutral", "happy", "amaze", "curious",
+                             "sad", "confused", "sleepy", "thinking"}
+                    self.last_emotion = emotion if emotion in valid else "neutral"
+                    tool_response_parts.append(types.Part(
+                        function_response=types.FunctionResponse(
+                            name="set_emotion",
+                            response={"ok": True, "emotion": self.last_emotion},
                         ),
                     ))
                 elif fc.name == "recall_visual" and self._on_recall_visual:

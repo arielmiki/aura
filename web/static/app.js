@@ -137,6 +137,53 @@ function pulseAdaptCard() {
   adaptPulseEl.classList.add('flash');
 }
 
+// ---------------- Character picker ----------------
+
+const charPickerEl = document.getElementById('char-picker');
+const avatarWrap = document.getElementById('avatar-wrap');
+let currentCharacterId = 'rocky';
+
+async function loadCharacters() {
+  if (!charPickerEl) return;
+  try {
+    const r = await fetch('/api/characters');
+    const j = await r.json();
+    charPickerEl.innerHTML = '';
+    currentCharacterId = j.active || 'rocky';
+    if (avatarWrap) avatarWrap.dataset.character = currentCharacterId;
+    for (const c of (j.characters || [])) {
+      const btn = document.createElement('button');
+      btn.className = 'char-btn' + (c.id === currentCharacterId ? ' active' : '');
+      btn.dataset.char = c.id;
+      btn.textContent = c.name.toUpperCase();
+      btn.title = c.description;
+      btn.addEventListener('click', () => switchCharacter(c.id));
+      charPickerEl.appendChild(btn);
+    }
+  } catch (e) {
+    console.error('[chars] failed to load', e);
+  }
+}
+
+async function switchCharacter(id) {
+  if (id === currentCharacterId) return;
+  try {
+    const r = await fetch(`/api/characters/${id}`, { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      currentCharacterId = id;
+      if (avatarWrap) avatarWrap.dataset.character = id;
+      document.querySelectorAll('.char-btn').forEach((b) =>
+        b.classList.toggle('active', b.dataset.char === id));
+      console.log('[chars] switched to', id);
+    }
+  } catch (e) {
+    console.error('[chars] switch failed', e);
+  }
+}
+
+loadCharacters();
+
 // ---------------- Adaption Labs corpus mini ----------------
 // Auto-runs on the server every 5 turns; UI just shows status.
 
