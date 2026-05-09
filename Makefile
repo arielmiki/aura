@@ -13,3 +13,6 @@ setup:
 
 logs:
 	ssh me322@pibot 'tail -f ~/pi-rocky/rocky.log'
+
+run-local:
+	. .venv-mac/bin/activate && python rocky.py

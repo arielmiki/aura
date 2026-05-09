@@ -23,8 +23,11 @@ SPK_RATE = 48000        # what HyperX hw:2,0 accepts (we upsample 2x)
 CHUNK_MS = 40           # 40 ms chunks → snappy turn-taking
 
 
-def find_device(substring: str, kind: str) -> int:
-    """kind: 'input' or 'output'."""
+def find_device(substring: str | None, kind: str) -> int | None:
+    """kind: 'input' or 'output'. Returns None when substring is empty/None
+    so sounddevice uses the system default device."""
+    if not substring:
+        return None
     for i, d in enumerate(sd.query_devices()):
         if substring not in d["name"]:
             continue
