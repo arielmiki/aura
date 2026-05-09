@@ -1,4 +1,9 @@
-"""ElevenLabs Scribe STT wrapper."""
+"""ElevenLabs Scribe STT wrapper.
+
+The user always speaks English or Indonesian. Add quality hints so
+Scribe doesn't waste effort on speaker diarization or noise tagging,
+and stays deterministic across retries.
+"""
 from __future__ import annotations
 
 import io
@@ -23,5 +28,9 @@ class STT:
         result = self._client.speech_to_text.convert(
             file=io.BytesIO(audio_bytes),
             model_id=SCRIBE_MODEL,
+            num_speakers=1,
+            diarize=False,
+            tag_audio_events=False,
+            temperature=0.0,
         )
         return (result.text or "").strip()
