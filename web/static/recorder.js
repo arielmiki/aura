@@ -162,13 +162,14 @@ function startLipSync() {
       sum += v * v;
     }
     const rms = Math.sqrt(sum / data.length);
-    // Map RMS to a mouth-open factor.
-    // While 'speaking' we drive it from audio amplitude; otherwise a small idle.
+    // Map RMS to a mouth-open scaleY (vertical squash/stretch). Bigger
+    // visible motion when Rocky/Hana speaks, smooth idle otherwise.
     let target = 1;
     if (state === 'speaking') {
-      target = Math.min(2.5, 1 + rms * 25);
+      target = Math.min(3.5, 1 + rms * 50);
     } else {
-      target = 1;  // closed/neutral
+      // gentle idle "breathing" of the mouth shape
+      target = 1 + Math.sin(performance.now() / 600) * 0.04;
     }
     wrap.querySelectorAll('.mouth-group').forEach((g) => {
       g.style.setProperty('--mouth-open', target.toFixed(2));
