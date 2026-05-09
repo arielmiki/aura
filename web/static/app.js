@@ -52,18 +52,6 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
-// Mirror the status pill's class onto the orb so its animation tracks state.
-// (recorder.js already owns `statusEl`; we re-fetch by id to avoid duplicate
-// const declarations colliding in the shared global scope.)
-const _orbEl = document.getElementById('orb');
-const _statusElForOrb = document.getElementById('status');
-const _syncOrb = () => {
-  const m = _statusElForOrb.className.match(/status-([a-z]+)/);
-  _orbEl.className = 'orb' + (m ? ' ' + m[1] : '');
-};
-new MutationObserver(_syncOrb).observe(_statusElForOrb, { attributes: true, attributeFilter: ['class'] });
-_syncOrb();
-
 // Expose for recorder.js (keeps the existing call signature)
 window.rocky = {
   setTranscript: appendTurn,

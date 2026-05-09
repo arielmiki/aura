@@ -15,12 +15,15 @@ const audioEl = document.getElementById('audio');
 const statusEl = document.getElementById('status');
 const talkBtn = document.getElementById('talk-btn');
 const meterEl = document.getElementById('meter');
+const vizCanvas = document.getElementById('viz');
+const vizCtx = vizCanvas ? vizCanvas.getContext('2d') : null;
 
 let state = 'idle';
 let mediaStream = null;
 let recorder = null;
 let recordedChunks = [];
-let analyser = null;
+let analyser = null;          // mic analyser (RMS, VAD, viz during recording)
+let ttsAnalyser = null;       // TTS audio analyser (viz during speaking)
 let dataArray = null;
 let belowSince = 0;
 let aboveSince = 0;
@@ -73,15 +76,170 @@ async function ensureMedia() {
   videoEl.srcObject = mediaStream;
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioCtx.createMediaStreamSource(mediaStream);
+
+  // Mic analyser — drives RMS for VAD and the viz during recording.
+  const micSource = audioCtx.createMediaStreamSource(mediaStream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 1024;
-  source.connect(analyser);
+  micSource.connect(analyser);
   dataArray = new Uint8Array(analyser.fftSize);
 
+  // TTS analyser — taps Rocky's audio output so the viz reacts to it.
+  // createMediaElementSource removes the element's default routing, so we
+  // explicitly reconnect to destination to keep audible playback.
+  try {
+    const ttsSource = audioCtx.createMediaElementSource(audioEl);
+    ttsAnalyser = audioCtx.createAnalyser();
+    ttsAnalyser.fftSize = 256;
+    ttsSource.connect(ttsAnalyser);
+    ttsSource.connect(audioCtx.destination);
+  } catch (e) {
+    console.warn('[rocky] could not attach TTS analyser', e);
+  }
+
   setInterval(meterTick, METER_INTERVAL_MS);
+  startViz();
   console.log('[rocky] media ready');
   return true;
+}
+
+// ---------------- visualizer ----------------
+
+const STATE_COLORS = {
+  idle:       [108, 122, 150],
+  ready:      [90,  216, 255],
+  recording:  [255, 193, 90 ],
+  submitting: [255, 90,  216],
+  thinking:   [255, 90,  216],
+  speaking:   [95,  255, 177],
+};
+
+function fitCanvas() {
+  if (!vizCanvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = vizCanvas.offsetWidth, h = vizCanvas.offsetHeight;
+  if (vizCanvas.width !== w * dpr || vizCanvas.height !== h * dpr) {
+    vizCanvas.width = w * dpr;
+    vizCanvas.height = h * dpr;
+    vizCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+}
+
+function startViz() {
+  if (!vizCanvas) return;
+  window.addEventListener('resize', fitCanvas);
+  fitCanvas();
+  requestAnimationFrame(drawViz);
+}
+
+const _vizFreq = new Uint8Array(128);
+
+function drawViz() {
+  if (!vizCanvas || !vizCtx) return;
+  fitCanvas();
+  const w = vizCanvas.offsetWidth, h = vizCanvas.offsetHeight;
+  vizCtx.clearRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+  const baseR = Math.min(w, h) * 0.18;
+  const t = performance.now() / 1000;
+
+  // Choose data source for this frame.
+  let source = null;
+  if (state === 'recording' && analyser) source = analyser;
+  else if (state === 'speaking' && ttsAnalyser) source = ttsAnalyser;
+
+  const bins = 64;
+  const data = new Array(bins);
+  if (source) {
+    const raw = new Uint8Array(source.frequencyBinCount);
+    source.getByteFrequencyData(raw);
+    // Take the lower half (where the energy lives for voice).
+    for (let i = 0; i < bins; i++) {
+      data[i] = raw[Math.floor(i * raw.length * 0.6 / bins)] / 255;
+    }
+  } else {
+    // Synthesized soft wobble — keeps the viz alive when no audio source.
+    for (let i = 0; i < bins; i++) {
+      const noise = Math.sin(t * 1.4 + i * 0.31) * 0.5
+                  + Math.sin(t * 0.7 + i * 0.13) * 0.3 + 0.5;
+      data[i] = Math.max(0, Math.min(1, noise * 0.35));
+    }
+  }
+
+  const [r, g, b] = STATE_COLORS[state] || STATE_COLORS.ready;
+  const stroke = `rgba(${r},${g},${b},0.95)`;
+  const glow   = `rgba(${r},${g},${b},0.6)`;
+  const fade   = `rgba(${r},${g},${b},0)`;
+
+  // Center radial glow (always present, breathes slowly)
+  const breath = 1 + 0.04 * Math.sin(t * 1.6);
+  const grad = vizCtx.createRadialGradient(cx, cy, 0, cx, cy, baseR * 1.1 * breath);
+  grad.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
+  grad.addColorStop(0.5, `rgba(${r},${g},${b},0.18)`);
+  grad.addColorStop(1, fade);
+  vizCtx.fillStyle = grad;
+  vizCtx.beginPath();
+  vizCtx.arc(cx, cy, baseR * 1.1 * breath, 0, Math.PI * 2);
+  vizCtx.fill();
+
+  // Inner solid core
+  vizCtx.fillStyle = `rgba(${r},${g},${b},0.28)`;
+  vizCtx.beginPath();
+  vizCtx.arc(cx, cy, baseR * 0.55, 0, Math.PI * 2);
+  vizCtx.fill();
+
+  // Spinning thinking arcs
+  if (state === 'thinking' || state === 'submitting') {
+    const arcs = 3;
+    for (let a = 0; a < arcs; a++) {
+      const start = (t * 1.2 + a * (Math.PI * 2 / arcs)) % (Math.PI * 2);
+      vizCtx.strokeStyle = stroke;
+      vizCtx.lineWidth = 3;
+      vizCtx.shadowBlur = 16;
+      vizCtx.shadowColor = glow;
+      vizCtx.beginPath();
+      vizCtx.arc(cx, cy, baseR * 1.4, start, start + 0.6);
+      vizCtx.stroke();
+    }
+    vizCtx.shadowBlur = 0;
+  }
+
+  // Circular FFT bars
+  const rotate = state === 'thinking' ? t * 0.5 : 0;
+  vizCtx.shadowBlur = 10;
+  vizCtx.shadowColor = glow;
+  vizCtx.lineCap = 'round';
+  vizCtx.lineWidth = 2.5;
+  vizCtx.strokeStyle = stroke;
+  for (let i = 0; i < bins; i++) {
+    const angle = (i / bins) * Math.PI * 2 + rotate - Math.PI / 2;
+    const v = data[i];
+    const inner = baseR * 0.95;
+    const outer = inner + Math.max(2, v * baseR * 1.4);
+    const x1 = cx + Math.cos(angle) * inner;
+    const y1 = cy + Math.sin(angle) * inner;
+    const x2 = cx + Math.cos(angle) * outer;
+    const y2 = cy + Math.sin(angle) * outer;
+    vizCtx.beginPath();
+    vizCtx.moveTo(x1, y1);
+    vizCtx.lineTo(x2, y2);
+    vizCtx.stroke();
+  }
+  vizCtx.shadowBlur = 0;
+
+  // Outer expanding ring during recording / speaking
+  if (state === 'recording' || state === 'speaking') {
+    const phase = (t % 1.2) / 1.2;
+    const ringR = baseR * (1.4 + phase * 0.9);
+    vizCtx.strokeStyle = `rgba(${r},${g},${b},${(1 - phase).toFixed(3)})`;
+    vizCtx.lineWidth = 1.5;
+    vizCtx.beginPath();
+    vizCtx.arc(cx, cy, ringR, 0, Math.PI * 2);
+    vizCtx.stroke();
+  }
+
+  requestAnimationFrame(drawViz);
 }
 
 function setMode(m) {
