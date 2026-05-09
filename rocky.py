@@ -1,6 +1,4 @@
-"""Pi-Rocky entry point. Mic → Gemini Live (with image + tools) → speaker.
-The vocab store + camera service are wired in here. Web UI added in Task 8.
-"""
+"""Pi-Rocky entry point. Mic → Gemini Live (image + tools) → speaker, plus web UI."""
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +12,7 @@ from audio import MicStream, SpeakerStream
 from brain import GeminiBrain
 from camera import CameraService
 from vocab import VocabStore
+from web.server import make_app, serve
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -23,12 +22,25 @@ SEED_VOCAB = ["YES", "NO", "HUMAN", "ROCKY", "QUESTION", "NEW", "WORD",
               "HELLO", "GOOD", "BAD", "BIG", "SMALL"]
 
 
+class Status:
+    def __init__(self) -> None:
+        self.value = "idle"
+
+    def set(self, store: VocabStore, value: str) -> None:
+        if self.value == value:
+            return
+        self.value = value
+        store.set_status(value)
+
+
 async def amain() -> None:
     load_dotenv()
+    port = int(os.environ.get("ROCKY_WEB_PORT", "8000"))
     mic = MicStream(os.environ.get("ROCKY_MIC_DEVICE", "Snowball"))
     spk = SpeakerStream(os.environ.get("ROCKY_SPEAKER_DEVICE", "HyperX"))
     cam = CameraService(size=(640, 480))
     vocab = VocabStore(path=Path("vocab.json"), seed=SEED_VOCAB)
+    status = Status()
 
     await mic.start()
     await spk.start()
@@ -37,6 +49,7 @@ async def amain() -> None:
     template = Path("prompts/rocky_system.md").read_text()
 
     async def play(audio: bytes) -> None:
+        status.set(vocab, "speaking")
         await spk.write(audio)
 
     async def learn_word(word: str, description: str) -> None:
@@ -51,10 +64,13 @@ async def amain() -> None:
     )
     await brain.start()
 
+    app = make_app(vocab, cam, lambda: status.value)
+    web_task = asyncio.create_task(serve(app, port=port))
+
     async def pump_mic() -> None:
-        # Send current camera frame at most once per second alongside audio.
         last_frame_time = 0.0
         async for chunk in mic.chunks():
+            status.set(vocab, "speaking" if spk.is_speaking else "listening")
             await brain.send_audio(chunk)
             now = asyncio.get_event_loop().time()
             jpg = cam.latest_jpeg()
@@ -62,10 +78,11 @@ async def amain() -> None:
                 await brain.send_image_jpeg(jpg)
                 last_frame_time = now
 
-    log.info("rocky online — vocab: %s", vocab.words())
+    log.info("rocky online at http://pibot:%d (vocab: %s)", port, vocab.words())
     try:
         await pump_mic()
     finally:
+        web_task.cancel()
         await brain.stop()
         await cam.stop()
         await mic.stop()

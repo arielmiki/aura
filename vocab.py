@@ -55,6 +55,9 @@ class VocabStore:
         if q in self._subscribers:
             self._subscribers.remove(q)
 
+    def set_status(self, status: str) -> None:
+        self._broadcast({"type": "status", "status": status})
+
     def _broadcast(self, event: dict) -> None:
         for q in self._subscribers:
             try:

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rocky</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: ui-monospace, monospace; background: #0e0e10; color: #e8e8ea; padding: 24px; }
+  h1 { font-weight: 700; letter-spacing: 0.1em; margin: 0 0 16px; }
+  #status { display: inline-block; padding: 4px 10px; border: 1px solid #444; border-radius: 99px; font-size: 12px; }
+  .status-listening { color: #5fd; border-color: #5fd; }
+  .status-thinking  { color: #f93; border-color: #f93; }
+  .status-speaking  { color: #f3d; border-color: #f3d; }
+  .status-idle      { color: #777; border-color: #777; }
+  .grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; margin-top: 24px; }
+  .vocab { display: flex; flex-wrap: wrap; gap: 8px; }
+  .word { padding: 6px 10px; background: #1a1a1d; border: 1px solid #2a2a2d; border-radius: 6px; font-size: 14px; }
+  .word.new { background: #2d4; color: #0e0e10; animation: pulse 1.5s ease-out; }
+  @keyframes pulse { 0% { transform: scale(1.2); } 100% { transform: scale(1); } }
+  #frame { width: 320px; height: 240px; background: #1a1a1d; border-radius: 8px; object-fit: cover; }
+  .meta { font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+  <h1>ROCKY <span id="status" class="status-idle">idle</span></h1>
+  <div class="grid">
+    <div>
+      <div class="meta" id="count">0 words</div>
+      <div class="vocab" id="vocab"></div>
+    </div>
+    <div>
+      <img id="frame" alt="camera">
+      <div class="meta">what rocky sees</div>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
