@@ -85,6 +85,16 @@ def make_app(memory: MemoryStore,
             return Response(status_code=404)
         return FileResponse(p, media_type="image/jpeg")
 
+    @app.delete("/api/memories/{entry_id}")
+    async def api_memory_delete(entry_id: str):
+        if not entry_id.isalnum() or len(entry_id) > 32:
+            return {"ok": False, "error": "invalid id"}
+        return {"ok": memory.forget(entry_id)}
+
+    @app.delete("/api/memories")
+    async def api_memories_clear():
+        return {"ok": True, "removed": memory.clear()}
+
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
         await websocket.accept()

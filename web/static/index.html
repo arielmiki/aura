@@ -538,10 +538,44 @@
   .lightbox-when { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
 
   /* Make memory cards feel clickable */
-  .memory { cursor: pointer; }
+  .memory { cursor: pointer; position: relative; }
   .memory:active { transform: scale(0.98); }
   .memory.no-image { cursor: default; }
   .memory.no-image:active { transform: none; }
+
+  /* Per-memory delete (×) button */
+  .memory-x {
+    background: rgba(255,90,90,0.0);
+    color: var(--muted);
+    border: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px; line-height: 1;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  .memory:hover .memory-x { color: #ff7777; }
+  .memory-x:hover { background: rgba(255,90,90,0.2); color: #ffaaaa; }
+
+  /* CLEAR ALL button next to MEMORIES count */
+  .mem-clear {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid rgba(255,90,90,0.3);
+    border-radius: 99px;
+    padding: 2px 10px;
+    font-size: 9px; letter-spacing: 0.2em; font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mem-clear:hover {
+    background: rgba(255,90,90,0.15);
+    color: #ff9999;
+    border-color: rgba(255,90,90,0.5);
+  }
+  .mem-clear:disabled {
+    opacity: 0.3; cursor: not-allowed;
+  }
 
   /* Talk button row inside left-controls — horizontal mic meter beside button */
   .talk-row {
@@ -711,7 +745,10 @@
       <div class="pane-card memories-card">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <h2>MEMORIES</h2>
-          <span class="memory-count" id="memory-count">0</span>
+          <span style="display:inline-flex;gap:10px;align-items:baseline">
+            <span class="memory-count" id="memory-count">0</span>
+            <button id="clear-mem-btn" class="mem-clear" title="Clear all memories">CLEAR</button>
+          </span>
         </div>
         <div class="memory-list" id="memories">
           <div class="empty-mem">no memories yet</div>

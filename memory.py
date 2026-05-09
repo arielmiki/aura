@@ -107,6 +107,38 @@ class MemoryStore:
         self._save()
         self._broadcast({"type": "memory_compacted", "count": len(self._entries)})
 
+    def forget(self, entry_id: str) -> bool:
+        """Delete a single memory and its image. Returns True if removed."""
+        for i, e in enumerate(self._entries):
+            if e["id"] == entry_id:
+                self._entries.pop(i)
+                # Best-effort delete of the image; ignore if missing.
+                try:
+                    p = self.image_dir / f"{entry_id}.jpg"
+                    if p.exists():
+                        p.unlink()
+                except OSError:
+                    pass
+                self._save()
+                self._broadcast({"type": "memory_removed", "id": entry_id})
+                return True
+        return False
+
+    def clear(self) -> int:
+        """Delete every memory and image. Returns the number removed."""
+        n = len(self._entries)
+        for e in self._entries:
+            try:
+                p = self.image_dir / f"{e['id']}.jpg"
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+        self._entries = []
+        self._save()
+        self._broadcast({"type": "memory_cleared", "count": n})
+        return n
+
     async def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue()
         self._subscribers.append(q)

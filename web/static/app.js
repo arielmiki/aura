@@ -31,12 +31,40 @@ function renderMemories(entries, justAddedId) {
     fact.className = 'memory-fact';
     fact.textContent = e.fact;
     div.appendChild(fact);
+
+    const xBtn = document.createElement('button');
+    xBtn.className = 'memory-x';
+    xBtn.textContent = '×';
+    xBtn.title = 'Forget this memory';
+    xBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      try {
+        await fetch('/api/memories/' + e.id, { method: 'DELETE' });
+        // The WebSocket memory_removed event will refresh the list.
+      } catch (err) {
+        console.error('[rocky] forget failed', err);
+      }
+    });
+    div.appendChild(xBtn);
+
     if (e.has_image) {
       div.addEventListener('click', () => openMemory(e));
       div.title = 'Click to view full image';
     }
     memoriesEl.appendChild(div);
   }
+}
+
+const clearMemBtn = document.getElementById('clear-mem-btn');
+if (clearMemBtn) {
+  clearMemBtn.addEventListener('click', async () => {
+    if (!confirm('Forget all memories? This cannot be undone.')) return;
+    try {
+      await fetch('/api/memories', { method: 'DELETE' });
+    } catch (e) {
+      console.error('[rocky] clear failed', e);
+    }
+  });
 }
 
 function appendTurn(youText, rockyText) {
@@ -202,7 +230,8 @@ ws.onmessage = (msg) => {
     fetch('/api/memories').then(r => r.json()).then(j => {
       renderMemories(j.entries, data.entry.id);
     });
-  } else if (data.type === 'memory_compacted') {
+  } else if (data.type === 'memory_removed' || data.type === 'memory_compacted'
+             || data.type === 'memory_cleared') {
     fetch('/api/memories').then(r => r.json()).then(j => renderMemories(j.entries));
   } else if (data.type === 'pattern_updated') {
     renderPatterns(data.state, true);
