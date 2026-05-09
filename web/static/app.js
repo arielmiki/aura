@@ -1,49 +1,52 @@
-const vocabEl  = document.getElementById('vocab');
-const countEl  = document.getElementById('count');
-const statusEl = document.getElementById('status');
-const frameEl  = document.getElementById('frame');
+// app.js — page state + WebSocket subscription.
+// recorder.js owns mic/camera/POST.
 
-let known = new Set();
+const memoriesEl  = document.getElementById('memories');
+const transcriptEl = document.getElementById('transcript');
 
-function setStatus(s) {
-  statusEl.textContent = s;
-  statusEl.className = 'status-' + s;
-}
-
-function render(entries, justAdded) {
-  vocabEl.innerHTML = '';
-  for (const e of entries) {
+function renderMemories(entries, justAddedId) {
+  memoriesEl.innerHTML = '';
+  // Most recent first
+  for (const e of [...entries].reverse()) {
     const div = document.createElement('div');
-    div.className = 'word' + (e.word === justAdded ? ' new' : '');
-    div.textContent = e.word;
-    div.title = e.description || '';
-    vocabEl.appendChild(div);
+    div.className = 'memory' + (e.id === justAddedId ? ' new' : '');
+    div.textContent = e.fact;
+    memoriesEl.appendChild(div);
   }
-  countEl.textContent = entries.length + ' words';
 }
 
-function refreshFrame() {
-  frameEl.src = '/frame.jpg?t=' + Date.now();
+function setTranscript(youText, rockyText) {
+  transcriptEl.innerHTML = '';
+  if (youText) {
+    const a = document.createElement('div');
+    a.className = 'you';
+    a.textContent = '> ' + youText;
+    transcriptEl.appendChild(a);
+  }
+  if (rockyText) {
+    const b = document.createElement('div');
+    b.className = 'rocky';
+    b.textContent = rockyText;
+    transcriptEl.appendChild(b);
+  }
 }
-setInterval(refreshFrame, 1000);
-refreshFrame();
 
-const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws')
-                       + '://' + location.host + '/ws');
+// Expose for recorder.js
+window.rocky = { setTranscript };
+
+const ws = new WebSocket(
+  (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws'
+);
 
 ws.onmessage = (msg) => {
   const data = JSON.parse(msg.data);
   if (data.type === 'snapshot') {
-    render(data.entries);
-    setStatus(data.status || 'idle');
-  } else if (data.type === 'word_learned') {
-    fetch('/api/vocab').then(r => r.json()).then(j => {
-      render(j.entries, data.word);
-      setStatus(j.status || 'idle');
+    renderMemories(data.entries);
+  } else if (data.type === 'memory_added') {
+    fetch('/api/memories').then(r => r.json()).then(j => {
+      renderMemories(j.entries, data.entry.id);
     });
-  } else if (data.type === 'status') {
-    setStatus(data.status);
+  } else if (data.type === 'memory_compacted') {
+    fetch('/api/memories').then(r => r.json()).then(j => renderMemories(j.entries));
   }
 };
-
-ws.onclose = () => setStatus('idle');
