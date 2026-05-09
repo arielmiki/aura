@@ -27,7 +27,7 @@ from tts import TTS, detect_language
 log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "static"
-AUTO_ADAPT_EVERY_N_TURNS = 5  # fire an adaptation run after every N completed turns
+AUTO_ADAPT_EVERY_N_TURNS = 30  # check categories every N turns; hash gate skips unchanged
 
 
 def make_app(memory: MemoryStore,
@@ -63,7 +63,11 @@ def make_app(memory: MemoryStore,
         if not adapter.configured:
             return {"error": "ADAPTION_API_KEY not set"}
         try:
-            state = await adapter.adapt(conversation.turns())
+            state = await adapter.adapt(
+                turns=conversation.turns(),
+                memory_entries=memory.entries(),
+                patterns_state=patterns.state(),
+            )
             return {"state": state}
         except Exception as e:
             log.exception("adapt failed")
@@ -197,16 +201,18 @@ def make_app(memory: MemoryStore,
         # 3. Append to conversation log
         conversation.append(transcript, reply)
 
-        # 3.5. Auto-adaptation: every N turns, kick off an adaptation run in
-        # the background so Rocky's growing corpus stays continuously prepped
-        # for fine-tuning. We don't await it — failures are logged silently.
+        # 3.5. Auto-adaptation: every N turns, kick off an adapt cycle. The
+        # adapter's hash gate per category will skip any category that hasn't
+        # changed since the last upload, so this is cheap.
         turn_count = len(conversation.turns())
         if (adapter.configured
                 and turn_count > 0
                 and turn_count % AUTO_ADAPT_EVERY_N_TURNS == 0
                 and adapter.state().get("status") not in ("uploading", "running")):
             log.info("auto-adapt: triggering at turn %d", turn_count)
-            asyncio.create_task(_run_adapt(adapter, conversation.turns()))
+            asyncio.create_task(_run_adapt(
+                adapter, conversation.turns(), memory.entries(), patterns.state()
+            ))
 
         # 4. TTS — Rocky's output is always English by policy (the persona
         # prompt enforces this). Pin language_code='en' so the voice stays
@@ -232,11 +238,15 @@ async def _stream_tts(tts: TTS, text: str, language_code: str = None) -> AsyncIt
         yield chunk
 
 
-async def _run_adapt(adapter, turns: list[dict]) -> None:
+async def _run_adapt(adapter, turns, memory_entries, patterns_state) -> None:
     """Background-task wrapper around adapter.adapt() that swallows errors
     so a transient Adaption Labs hiccup never breaks the chat path."""
     try:
-        await adapter.adapt(turns)
+        await adapter.adapt(
+            turns=turns,
+            memory_entries=memory_entries,
+            patterns_state=patterns_state,
+        )
     except Exception:
         log.exception("auto-adapt failed")
 

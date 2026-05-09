@@ -476,7 +476,7 @@
     cursor: not-allowed;
   }
 
-  /* Corpus mini status pill in the header */
+  /* Corpus mini status pill in the header (now a button: click to adapt) */
   .corpus-mini {
     margin-left: 8px;
     display: inline-flex; align-items: center; gap: 6px;
@@ -486,6 +486,16 @@
     background: rgba(95,255,177,0.05);
     font-size: 10px; letter-spacing: 0.18em;
     color: var(--muted);
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .corpus-mini:hover {
+    background: rgba(95,255,177,0.15);
+    box-shadow: 0 0 14px rgba(95,255,177,0.25);
+  }
+  .corpus-mini:disabled {
+    opacity: 0.5; cursor: not-allowed;
   }
   .corpus-mini-label { color: var(--green); font-weight: 700; }
   .corpus-mini-count { color: var(--cyan); font-weight: 700; min-width: 1ch; }
@@ -672,11 +682,12 @@
       <div class="header">
         <div class="brand">ROCKY</div>
         <div id="status" class="pill status-idle">idle</div>
-        <div class="corpus-mini" id="corpus-mini" title="Adaption Labs auto-runs every 5 turns">
-          <span class="corpus-mini-label">CORPUS</span>
+        <button class="corpus-mini" id="corpus-btn"
+                title="Click to run an Adaption Labs adapt cycle now (3 categories: chat, memories, patterns). Auto-runs every 30 turns; unchanged categories are skipped.">
+          <span class="corpus-mini-label">ADAPT</span>
           <span class="corpus-mini-count" id="corpus-turns">0</span>
           <span class="corpus-status" id="corpus-status">idle</span>
-        </div>
+        </button>
       </div>
     </header>
 

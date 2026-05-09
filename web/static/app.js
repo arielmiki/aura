@@ -171,6 +171,28 @@ setInterval(async () => {
   } catch (_) {}
 }, 5000);
 
+// Manual ADAPT NOW button in the header.
+const corpusBtn = document.getElementById('corpus-btn');
+if (corpusBtn) {
+  corpusBtn.addEventListener('click', async () => {
+    const s = corpusStatusEl?.textContent;
+    if (s === 'uploading' || s === 'running') return;  // already in flight
+    setCorpusStatus('uploading');
+    try {
+      const r = await fetch('/api/adapt', { method: 'POST' });
+      const j = await r.json();
+      if (j.state) renderCorpus(j.state);
+      else if (j.error) {
+        console.error('[adapt]', j.error);
+        setCorpusStatus('failed');
+      }
+    } catch (e) {
+      console.error('[adapt]', e);
+      setCorpusStatus('failed');
+    }
+  });
+}
+
 // ---------------- Memory lightbox ----------------
 
 const lightboxEl   = document.getElementById('lightbox');
