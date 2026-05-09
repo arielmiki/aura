@@ -1,22 +1,57 @@
-"""Gemini 2.5 Flash brain with remember(fact) tool dispatch.
+"""Gemini Flash brain with remember(fact) tool dispatch.
 
 Builds the system prompt from persona template + memories + recent conversation,
 calls Gemini once, and loops on any tool calls (executing remember and feeding
 the response back) until the model produces a text response.
+
+Two entry points:
+  - respond(transcript, image, ...): legacy text-input path (used as fallback
+    when STT runs separately).
+  - respond_audio(audio_bytes, mime, image, ...): audio-native path that skips
+    a separate STT call. The model both "hears" the user and replies in one
+    multimodal call, returning (user_said, reply). Drops ~700ms of latency.
 """
 from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Optional, Tuple
 
 from google import genai
 from google.genai import types
 
 log = logging.getLogger(__name__)
 
-LLM_MODEL = "gemini-2.5-flash"
+# Default text-only model (used by respond()).
+LLM_MODEL = os.environ.get("BRAIN_MODEL", "gemini-2.5-flash")
+# Audio-native model (used by respond_audio()). Smaller / faster Flash Lite
+# variant — tuned for low-latency conversational turns.
+LLM_MODEL_AUDIO = os.environ.get("BRAIN_AUDIO_MODEL", "gemini-3.1-flash-lite-preview")
+
+# Convention used by respond_audio() to extract a transcript from the model's
+# reply so the UI can still show YOU said "...". Kept tag-based (not JSON) so
+# we can coexist with tool calls (remember / recall_visual) which don't play
+# nice with response_schema.
+TRANSCRIPT_TAG_RE = re.compile(r"\[YOU_SAID\]\s*(.*?)\s*(?:\n|\[REPLY\]|$)", re.S)
+REPLY_TAG_RE      = re.compile(r"\[REPLY\]\s*(.*)\s*$",                    re.S)
+AUDIO_FORMAT_INSTRUCTION = (
+    "\n\n# RESPONSE FORMAT (STRICT — applies whenever the user message is audio)\n"
+    "You are listening to the user via audio. Always begin your reply with "
+    "two tags, in this exact order, on their own lines:\n"
+    "[YOU_SAID] <a verbatim, single-line transcription of what the user just said>\n"
+    "[REPLY] <your spoken reply — only this part is read aloud>\n"
+    "Tool calls (remember, recall_visual) may still happen normally; the tags "
+    "appear in your final text turn after any tool calls finish.\n"
+    "\n# MEMORY USE (NON-NEGOTIABLE)\n"
+    "The 'ACTIVE MEMORY' block you'll see WITH each user message lists facts "
+    "you already know about this person. You MUST reference these facts when "
+    "relevant: use the user's name, recall their preferences, mention their "
+    "pets/family/work by name, build on prior topics. NEVER ask for "
+    "information that ACTIVE MEMORY already gives you. If a memory matches "
+    "the topic, weave it in naturally — don't pretend you've forgotten."
+)
 
 REMEMBER_TOOL = types.Tool(function_declarations=[types.FunctionDeclaration(
     name="remember",
@@ -155,12 +190,20 @@ class Brain:
             adapted_knowledge=adapted_knowledge or "(none yet)",
         )
 
-        # Build the user turn: optional inline memory recap + text + image.
-        # The recap is injected *with* the user's message so Gemini can't
-        # ignore it the way it sometimes does with long system prompts.
+        # Build the user turn: ACTIVE MEMORY (full fact list) + optional
+        # relevant-recap + text + image. The memory block is injected with
+        # every user message so Gemini can't quietly ignore it the way it
+        # sometimes does with long system prompts.
         parts: list[types.Part] = []
+        if memories:
+            memory_block = (
+                "ACTIVE MEMORY — facts about this person you already know. "
+                "Use them aggressively in your reply:\n"
+                + "\n".join(f"  - {m}" for m in memories)
+            )
+            parts.append(types.Part(text=memory_block))
         if inline_recall:
-            recap = "(You remember: " + "; ".join(inline_recall) + ")"
+            recap = "(Especially relevant right now: " + "; ".join(inline_recall) + ")"
             parts.append(types.Part(text=recap))
         parts.append(types.Part(text=transcript))
         if image_jpeg:
@@ -262,6 +305,145 @@ class Brain:
         # Hit iteration cap; fall back gracefully.
         log.warning("tool-call loop exceeded cap; returning last partial text")
         return "Let me think about that. Question?"
+
+    async def respond_audio(self,
+                            audio_bytes: bytes,
+                            audio_mime: str,
+                            image_jpeg: Optional[bytes],
+                            memories: list[str],
+                            conversation: list[dict],
+                            patterns: str = "",
+                            adapted_knowledge: str = "",
+                            inline_recall: list[str] = None) -> Tuple[str, str]:
+        """Audio-native turn. Skips a separate STT call: the model hears the
+        user's audio directly and emits both the transcript and the reply in
+        one multimodal response.
+
+        Returns (user_said, reply). user_said may be empty if the model
+        produced an unparseable reply — callers should fall back to the text
+        path when that happens.
+        """
+        self._current_image = image_jpeg
+        prompt = self._template.format(
+            memories="\n".join(f"- {m}" for m in memories) or "(none yet)",
+            conversation=_format_conversation(conversation),
+            patterns=patterns or "(none yet)",
+            adapted_knowledge=adapted_knowledge or "(none yet)",
+        )
+        # Append the format directive so the model emits [YOU_SAID]/[REPLY].
+        prompt = prompt + AUDIO_FORMAT_INSTRUCTION
+
+        parts: list[types.Part] = []
+        # ACTIVE MEMORY block — injected with EVERY turn, right before the
+        # audio. Inline injection bypasses Gemini's tendency to deprioritize
+        # the system prompt over time. We pass the full fact list since it's
+        # text-only and small.
+        if memories:
+            memory_block = (
+                "ACTIVE MEMORY — facts about this person you already know. "
+                "Use them aggressively in your reply:\n"
+                + "\n".join(f"  - {m}" for m in memories)
+            )
+            parts.append(types.Part(text=memory_block))
+        if inline_recall:
+            recap = "(Especially relevant right now: " + "; ".join(inline_recall) + ")"
+            parts.append(types.Part(text=recap))
+        # Audio replaces the text transcript as the user's "message".
+        parts.append(types.Part(inline_data=types.Blob(
+            data=audio_bytes,
+            mime_type=audio_mime or "audio/webm",
+        )))
+        if image_jpeg:
+            parts.append(types.Part(inline_data=types.Blob(
+                data=image_jpeg, mime_type="image/jpeg",
+            )))
+
+        contents: list[types.Content] = [types.Content(role="user", parts=parts)]
+        self.last_emotion = "neutral"
+
+        tools = [REMEMBER_TOOL]
+        if self._on_recall_visual is not None:
+            tools.append(RECALL_VISUAL_TOOL)
+
+        for _ in range(2):
+            resp = await self._client.aio.models.generate_content(
+                model=LLM_MODEL_AUDIO,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt,
+                    tools=tools,
+                ),
+            )
+            cand = resp.candidates[0]
+            tool_call_parts = [
+                p for p in cand.content.parts
+                if getattr(p, "function_call", None)
+            ]
+            if not tool_call_parts:
+                raw = _extract_text(cand.content.parts)
+                return _parse_audio_reply(raw)
+
+            contents.append(cand.content)
+            tool_response_parts: list[types.Part] = []
+            for p in tool_call_parts:
+                fc = p.function_call
+                if fc.name == "remember":
+                    fact = (fc.args or {}).get("fact", "")
+                    mid = await self._on_remember(fact, self._current_image)
+                    tool_response_parts.append(types.Part(
+                        function_response=types.FunctionResponse(
+                            name="remember",
+                            response={"id": mid or "duplicate"},
+                        ),
+                    ))
+                elif fc.name == "recall_visual" and self._on_recall_visual:
+                    query = (fc.args or {}).get("query", "")
+                    result = await self._on_recall_visual(query)
+                    if result:
+                        tool_response_parts.append(types.Part(
+                            function_response=types.FunctionResponse(
+                                name="recall_visual",
+                                response={
+                                    "found": True,
+                                    "fact": result.get("fact", ""),
+                                    "saved_at": result.get("saved_at"),
+                                },
+                            ),
+                        ))
+                    else:
+                        tool_response_parts.append(types.Part(
+                            function_response=types.FunctionResponse(
+                                name="recall_visual",
+                                response={"found": False},
+                            ),
+                        ))
+                else:
+                    tool_response_parts.append(types.Part(
+                        function_response=types.FunctionResponse(
+                            name=fc.name,
+                            response={"error": "unknown tool"},
+                        ),
+                    ))
+            contents.append(types.Content(role="user", parts=tool_response_parts))
+
+        log.warning("audio tool-call loop exceeded cap")
+        return "", "Let me think about that. Question?"
+
+
+def _parse_audio_reply(raw: str) -> Tuple[str, str]:
+    """Pull (user_said, reply) out of a [YOU_SAID]...[REPLY]... tagged
+    response. If the tags are missing, return ('', raw) so the caller can
+    decide whether to fall back to the STT path."""
+    if not raw:
+        return "", ""
+    you_match = TRANSCRIPT_TAG_RE.search(raw)
+    reply_match = REPLY_TAG_RE.search(raw)
+    you_said = you_match.group(1).strip() if you_match else ""
+    reply = reply_match.group(1).strip() if reply_match else ""
+    if not reply:
+        # Tags not honored — strip any tag fragments and use the whole text.
+        reply = re.sub(r"\[YOU_SAID\].*?\n", "", raw, count=1, flags=re.S).strip()
+    return you_said, reply or "Question?"
 
 
 def _extract_text(parts) -> str:

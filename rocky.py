@@ -10,6 +10,8 @@ from adapt import Adapter
 from characters import CHARACTERS, DEFAULT_CHARACTER
 from conversation import ConversationLog
 from llm import Brain, caption_image
+# OpenAI backend is loaded lazily below (only if BRAIN_BACKEND=openai)
+# so the SDK isn't required when sticking with Gemini.
 from memory import MemoryStore
 from patterns import PatternStore
 from stt import STT
@@ -52,11 +54,15 @@ async def _on_remember(fact: str, image_jpeg=None):
 
 
 async def _enrich_with_caption(mid: str, base_fact: str, image_jpeg: bytes):
-    """Background task: caption the image, append to the memory's fact."""
+    """Background task: caption the image and store as a SEPARATE field.
+
+    We deliberately don't append to the fact — long visual descriptions
+    pollute the prompt when memories are injected into every turn. The
+    fact stays clean text; the caption is consulted by recall_visual."""
     try:
         visual = await caption_image(gemini_client, image_jpeg)
         if visual:
-            memory.update_fact(mid, f"{base_fact.rstrip('.')} — {visual}")
+            memory.update_visual(mid, visual)
             logging.getLogger('rocky').info("caption(bg) %s: %s", mid, visual)
     except Exception:
         logging.getLogger('rocky').exception("caption(bg) failed")
@@ -75,11 +81,27 @@ async def _on_recall_visual(query: str):
     }
 
 
-brain = Brain(
-    prompt,
-    on_remember=_on_remember,
-    on_recall_visual=_on_recall_visual,
-)
+# Pick the brain backend. Default: Gemini (audio-native multimodal).
+# Set BRAIN_BACKEND=openai to swap to GPT-5.5 (or whatever OPENAI_MODEL
+# points to). To revert: unset BRAIN_BACKEND, or set BRAIN_BACKEND=gemini.
+_BRAIN_BACKEND = os.environ.get("BRAIN_BACKEND", "gemini").lower()
+if _BRAIN_BACKEND == "openai":
+    from llm_openai import BrainOpenAI, OPENAI_MODEL
+    brain = BrainOpenAI(
+        prompt,
+        on_remember=_on_remember,
+        on_recall_visual=_on_recall_visual,
+    )
+    logging.getLogger('rocky').info(
+        "brain backend = OpenAI (model=%s) — STT path will be used since "
+        "OpenAI chat doesn't accept raw audio.", OPENAI_MODEL)
+else:
+    brain = Brain(
+        prompt,
+        on_remember=_on_remember,
+        on_recall_visual=_on_recall_visual,
+    )
+    logging.getLogger('rocky').info("brain backend = Gemini")
 
 
 def switch_character(char_id: str) -> bool:

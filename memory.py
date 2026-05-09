@@ -27,6 +27,18 @@ class MemoryStore:
 
         if self.path.exists():
             self._entries = json.loads(self.path.read_text())
+            # One-time migration: legacy entries glued the visual caption
+            # onto the fact with " — ". Split it so prompt injection sees
+            # clean, text-only facts. Re-running is a no-op.
+            migrated = False
+            for e in self._entries:
+                if "visual_caption" not in e and " — " in e.get("fact", ""):
+                    base, _, visual = e["fact"].partition(" — ")
+                    e["fact"] = base.strip().rstrip(".") or e["fact"]
+                    e["visual_caption"] = visual.strip()
+                    migrated = True
+            if migrated:
+                self._save()
 
     def facts(self) -> list[str]:
         return [e["fact"] for e in self._entries]
@@ -35,11 +47,22 @@ class MemoryStore:
         return list(self._entries)
 
     def update_fact(self, entry_id: str, new_fact: str) -> bool:
-        """Replace the fact text of an existing entry. Used by the async
-        caption task to enrich a memory after it's already been saved."""
+        """Replace the fact text of an existing entry."""
         for e in self._entries:
             if e["id"] == entry_id:
                 e["fact"] = new_fact
+                self._save()
+                self._broadcast({"type": "memory_added", "entry": e})
+                return True
+        return False
+
+    def update_visual(self, entry_id: str, visual_caption: str) -> bool:
+        """Attach a visual caption to an existing entry without polluting
+        the fact text. The fact stays clean (text-only) for prompt
+        injection; visual_caption is consulted by recall_visual."""
+        for e in self._entries:
+            if e["id"] == entry_id:
+                e["visual_caption"] = (visual_caption or "").strip()
                 self._save()
                 self._broadcast({"type": "memory_added", "entry": e})
                 return True
@@ -104,8 +127,14 @@ class MemoryStore:
             return []
         scored = []
         for entry in self._entries:
+            # Match against fact text AND visual_caption (split storage),
+            # so visual queries like "what mug?" still hit captioned images
+            # without polluting the fact text injected into prompts.
+            haystack = entry["fact"]
+            if entry.get("visual_caption"):
+                haystack = haystack + " " + entry["visual_caption"]
             fact_words = {w.strip(".,!?-—()'\"").lower()
-                          for w in entry["fact"].split()}
+                          for w in haystack.split()}
             score = len(q_words & fact_words)
             if score > 0:
                 scored.append((entry, score))

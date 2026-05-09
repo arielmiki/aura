@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aura — every presence has a personality</title>
 <meta name="description" content="Aura is an AI companion that sees, hears, and remembers. Pick a personality, talk naturally, and watch them adapt to you over time.">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<meta name="theme-color" content="#0a0816">
 <link rel="preconnect" href="https://rsms.me/">
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 <style>
@@ -120,9 +123,18 @@
     max-width: 1200px; margin: 0 auto;
   }
   .wordmark {
+    display: inline-flex; align-items: center; gap: 10px;
     font-family: var(--font-mono);
     font-weight: 700; font-size: var(--t-sm);
     letter-spacing: 0.32em;
+    text-decoration: none;
+  }
+  .wordmark .mark {
+    flex: 0 0 auto;
+    width: 24px; height: 24px;
+    filter: drop-shadow(0 0 8px rgba(168,155,255,0.45));
+  }
+  .wordmark .name {
     background: linear-gradient(96deg, var(--primary), var(--primary-2) 60%, var(--primary-3));
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
@@ -215,23 +227,20 @@
   }
   .hero-meta strong { color: var(--text); font-weight: 600; }
 
-  /* Floating aurora orb (visual anchor on the right) */
+  /* Animated sphere — canvas-based aurora visualizer.
+     Same visual language as the app's sphere; idle-animated with
+     synthesized waves so it's lively without needing audio. */
   .hero-orb {
-    position: absolute; right: -120px; top: 14%;
-    width: 540px; height: 540px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), transparent 40%),
-      radial-gradient(circle at 70% 70%, rgba(255,133,193,0.30), transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(168,155,255,0.45), transparent 70%);
-    filter: blur(24px);
-    animation: orb-float 9s ease-in-out infinite;
+    position: absolute; right: -80px; top: 8%;
+    width: 580px; height: 580px;
     z-index: -1;
-    opacity: 0.85;
+    pointer-events: none;
   }
-  @keyframes orb-float {
-    0%,100% { transform: translate(0,0) scale(1); }
-    50%     { transform: translate(-30px, 24px) scale(1.06); }
+  .hero-orb canvas {
+    width: 100%; height: 100%; display: block;
+  }
+  @media (max-width: 880px) {
+    .hero-orb { right: -160px; top: 4%; width: 420px; height: 420px; opacity: 0.55; }
   }
 
   /* ============ SECTION HEADINGS ============ */
@@ -357,37 +366,146 @@
   }
   .feat-body { color: var(--text-soft); font-size: var(--t-sm); margin: 0; }
 
-  /* ============ TECH STACK ============ */
-  .stack-eyebrow {
-    text-align: center;
-    font-family: var(--font-mono);
-    font-size: var(--t-xs); letter-spacing: 0.32em; text-transform: uppercase;
-    color: var(--muted); margin-bottom: var(--s-5);
+  /* ============ TECH STACK — flow diagram ============
+     Three "role" cards (Voice → Brain → Evolution) connected by a thin
+     pulsing data-flow line. Each card has a glow tinted to its vendor. */
+  .stack-flow {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s-5);
+    margin-top: var(--s-6);
   }
-  .stack-row {
-    display: flex; flex-wrap: wrap; justify-content: center;
-    gap: var(--s-4); align-items: center;
+  /* The connecting flow line behind the cards. Pulses on a slow cycle. */
+  .stack-flow::before {
+    content: '';
+    position: absolute;
+    top: 96px; left: 12%; right: 12%;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent, var(--primary-3) 20%,
+      var(--primary-2) 50%,
+      var(--success) 80%, transparent);
+    opacity: 0.5;
+    z-index: 0;
   }
-  .stack-pill {
-    display: inline-flex; align-items: center; gap: var(--s-2);
-    padding: 14px 22px;
-    border-radius: var(--r-pill);
+  .stack-flow::after {
+    content: '';
+    position: absolute;
+    top: 95px; left: 0; right: 0;
+    height: 3px;
+    background: radial-gradient(60px 6px at var(--pulse-x, -10%) 50%,
+      rgba(255,255,255,0.85), transparent 70%);
+    z-index: 1;
+    pointer-events: none;
+    animation: flow-pulse 3.4s linear infinite;
+  }
+  @keyframes flow-pulse {
+    0%   { --pulse-x: 5%;  opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { --pulse-x: 95%; opacity: 0; }
+  }
+  /* CSS custom-property animation needs @property for browsers that
+     support it; fallback uses transform on a child via JS-free wobble. */
+  @supports (background: paint(something)) {
+    @property --pulse-x { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+  }
+
+  .stack-node {
+    position: relative;
+    z-index: 2;
+    padding: var(--s-6) var(--s-5);
+    border-radius: var(--r-lg);
     border: 1px solid var(--border);
-    font-family: var(--font-mono);
-    font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.04em;
     background: var(--panel);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(.5,1.6,.4,1), border-color 0.3s, box-shadow 0.3s;
+  }
+  .stack-node:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-strong);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  }
+  .stack-node::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--node-glow, transparent);
+    pointer-events: none;
+  }
+  .stack-node[data-vendor="eleven"]   { --node-glow: radial-gradient(circle at 25% 0%, rgba(255,133,193,0.18), transparent 60%); }
+  .stack-node[data-vendor="gemini"]   { --node-glow: radial-gradient(circle at 50% 0%, rgba(98,212,255,0.18),  transparent 60%); }
+  .stack-node[data-vendor="adaption"] { --node-glow: radial-gradient(circle at 75% 0%, rgba(123,232,164,0.18), transparent 60%); }
+
+  .stack-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    margin-bottom: var(--s-4);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .stack-icon i, .stack-icon svg {
+    width: 26px; height: 26px;
+  }
+  .stack-node[data-vendor="eleven"]   .stack-icon { color: var(--primary-3); border-color: rgba(255,133,193,0.4); box-shadow: 0 0 28px rgba(255,133,193,0.22) inset; }
+  .stack-node[data-vendor="gemini"]   .stack-icon { color: var(--primary-2); border-color: rgba(98,212,255,0.4);  box-shadow: 0 0 28px rgba(98,212,255,0.22)  inset; }
+  .stack-node[data-vendor="adaption"] .stack-icon { color: var(--success);   border-color: rgba(123,232,164,0.4); box-shadow: 0 0 28px rgba(123,232,164,0.22) inset; }
+
+  .stack-role {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: var(--s-2);
+  }
+  .stack-vendor {
+    font-family: var(--font-display);
+    font-size: 28px; font-weight: 700;
+    line-height: 1.05; letter-spacing: -0.02em;
+    margin: 0 0 var(--s-2);
+  }
+  .stack-node[data-vendor="eleven"]   .stack-vendor { background: linear-gradient(120deg, var(--primary-3), #ffc4dd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stack-node[data-vendor="gemini"]   .stack-vendor { background: linear-gradient(120deg, var(--primary-2), #b6eaff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stack-node[data-vendor="adaption"] .stack-vendor { background: linear-gradient(120deg, var(--success),   #c4f5d4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  .stack-product {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs); letter-spacing: 0.12em;
     color: var(--text-soft);
+    margin-bottom: var(--s-4);
   }
-  .stack-pill .role {
-    font-size: var(--t-xs); letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--muted); padding-left: 10px; margin-left: 6px;
-    border-left: 1px solid var(--border);
+  .stack-body {
+    color: var(--text-soft);
+    font-size: var(--t-sm);
+    line-height: 1.55;
+    margin: 0 0 var(--s-4);
   }
-  .stack-pill[data-vendor="gemini"]   { color: var(--primary-2); }
-  .stack-pill[data-vendor="eleven"]   { color: var(--primary-3); }
-  .stack-pill[data-vendor="adaption"] { color: var(--success); }
+  .stack-stats {
+    display: flex; gap: var(--s-4);
+    border-top: 1px dashed var(--border);
+    padding-top: var(--s-3);
+  }
+  .stack-stat { display: flex; flex-direction: column; gap: 2px; }
+  .stack-stat .num {
+    font-family: var(--font-display);
+    font-size: var(--t-md); font-weight: 700;
+    color: var(--text);
+  }
+  .stack-stat .lbl {
+    font-family: var(--font-mono);
+    font-size: 9px; letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 880px) {
+    .stack-flow { grid-template-columns: 1fr; }
+    .stack-flow::before, .stack-flow::after { display: none; }
+  }
 
   /* ============ FINAL CTA ============ */
   .final-cta {
@@ -435,7 +553,10 @@
   <!-- NAV -->
   <nav>
     <div class="nav-inner">
-      <div class="wordmark">AURA</div>
+      <a href="/" class="wordmark" aria-label="Aura home">
+        <img class="mark" src="/static/favicon.svg" alt="" aria-hidden="true">
+        <span class="name">AURA</span>
+      </a>
       <div class="nav-links">
         <a href="#characters" class="nav-link">Characters</a>
         <a href="#features"   class="nav-link">Features</a>
@@ -447,7 +568,7 @@
 
   <!-- HERO -->
   <header class="hero">
-    <div class="hero-orb" aria-hidden="true"></div>
+    <div class="hero-orb" aria-hidden="true"><canvas id="hero-sphere"></canvas></div>
     <div class="container">
       <div class="eyebrow reveal"><span class="dot"></span> AI Presence · live demo</div>
       <h1 class="reveal">
@@ -537,17 +658,60 @@
   <!-- STACK -->
   <section id="stack">
     <div class="container">
-      <div class="stack-eyebrow reveal">Powered by</div>
-      <div class="stack-row">
-        <div class="stack-pill reveal" data-vendor="gemini">
-          Gemini 2.5 Flash<span class="role">brain</span>
-        </div>
-        <div class="stack-pill reveal" data-vendor="eleven">
-          ElevenLabs Scribe + v3<span class="role">voice</span>
-        </div>
-        <div class="stack-pill reveal" data-vendor="adaption">
-          Adaption Labs<span class="role">adaptation</span>
-        </div>
+      <div class="section-eyebrow reveal">The stack</div>
+      <h2 class="section-title reveal">Three providers, one pipeline.</h2>
+      <p class="section-sub reveal">
+        Every turn flows through these three. Audio in, audio out, getting smarter with every exchange.
+      </p>
+
+      <div class="stack-flow">
+        <!-- THE VOICE — ElevenLabs -->
+        <article class="stack-node reveal" data-vendor="eleven">
+          <div class="stack-icon"><i data-lucide="mic" aria-hidden="true"></i></div>
+          <div class="stack-role">The voice</div>
+          <h3 class="stack-vendor">ElevenLabs</h3>
+          <div class="stack-product">Voice clone · v3 turbo</div>
+          <p class="stack-body">
+            Rocky's cloned voice for that signature alien charm. Hana's bright anime preset for the energy.
+            Streams in chunks so audio plays before the model finishes speaking.
+          </p>
+          <div class="stack-stats">
+            <div class="stack-stat"><span class="num">~600ms</span><span class="lbl">first audio</span></div>
+            <div class="stack-stat"><span class="num">2</span><span class="lbl">voices</span></div>
+          </div>
+        </article>
+
+        <!-- THE BRAIN — Gemini -->
+        <article class="stack-node reveal" data-vendor="gemini">
+          <div class="stack-icon"><i data-lucide="brain-circuit" aria-hidden="true"></i></div>
+          <div class="stack-role">The brain</div>
+          <h3 class="stack-vendor">Gemini</h3>
+          <div class="stack-product">3.1 Flash Lite · multimodal</div>
+          <p class="stack-body">
+            Audio + camera + memory + recent conversation, all in a single multimodal call. Hears how you
+            said it, sees what you saw, recalls what matters.
+          </p>
+          <div class="stack-stats">
+            <div class="stack-stat"><span class="num">1 call</span><span class="lbl">stt + llm</span></div>
+            <div class="stack-stat"><span class="num">3</span><span class="lbl">modalities</span></div>
+          </div>
+        </article>
+
+        <!-- THE EVOLUTION — Adaption Labs -->
+        <article class="stack-node reveal" data-vendor="adaption">
+          <div class="stack-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div>
+          <div class="stack-role">The evolution</div>
+          <h3 class="stack-vendor">Adaption</h3>
+          <div class="stack-product">Continuous adaptation</div>
+          <p class="stack-body">
+            Every conversation feeds a personalized training corpus. Reply length, tone, recurring topics —
+            quietly tuned to you over time, with hash-gated uploads that skip what hasn't changed.
+          </p>
+          <div class="stack-stats">
+            <div class="stack-stat"><span class="num">30 turns</span><span class="lbl">auto cycle</span></div>
+            <div class="stack-stat"><span class="num">3</span><span class="lbl">categories</span></div>
+          </div>
+        </article>
       </div>
     </div>
   </section>
@@ -565,13 +729,152 @@
     <div>Aura · Built at AI Engineer Singapore Hackathon · 2026</div>
   </footer>
 
+  <!-- Lucide icons (open-source) — used in the stack section. -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script>
+    if (window.lucide) lucide.createIcons();
+
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
       }
     }, { threshold: 0.12 });
     document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+    // ============ HERO SPHERE ============
+    // Canvas-based aurora visualizer. Same shape language as the app's
+    // sphere (concentric rings, breathing core, radial spokes) but with
+    // synthesized waves instead of FFT data. Lavender → cyan → rose.
+    (function heroSphere() {
+      const canvas = document.getElementById('hero-sphere');
+      if (!canvas || !canvas.getContext) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function fit() {
+        const w = canvas.offsetWidth, h = canvas.offsetHeight;
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+          canvas.width = w * dpr; canvas.height = h * dpr;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+      }
+
+      // Aurora palette (matches CSS tokens)
+      const COLORS = {
+        lavender: [168, 155, 255],
+        cyan:     [98, 212, 255],
+        rose:     [255, 133, 193],
+      };
+      function rgba(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+      const SPOKES = 84;   // radial bars distributed around the sphere
+      const RINGS  = 3;    // concentric translucent rings
+
+      function frame(now) {
+        fit();
+        const w = canvas.offsetWidth, h = canvas.offsetHeight;
+        ctx.clearRect(0, 0, w, h);
+
+        const cx = w / 2, cy = h / 2;
+        const baseR = Math.min(w, h) * 0.30;
+        const t = now / 1000;
+
+        // 1. Outer atmospheric glow — soft tri-color radial wash that
+        //    rotates very slowly behind everything.
+        const wash = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseR * 1.7);
+        wash.addColorStop(0.00, rgba(COLORS.lavender, 0.55));
+        wash.addColorStop(0.45, rgba(COLORS.cyan,     0.22));
+        wash.addColorStop(0.85, rgba(COLORS.rose,     0.12));
+        wash.addColorStop(1.00, 'rgba(0,0,0,0)');
+        ctx.fillStyle = wash;
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR * 1.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Concentric rings — slow opposite rotations create motion
+        //    even when the sphere itself isn't being driven by audio.
+        for (let r = 0; r < RINGS; r++) {
+          const radius = baseR * (1.05 + r * 0.18);
+          const breath = 1 + 0.018 * Math.sin(t * 0.8 + r);
+          const alpha  = 0.20 - r * 0.05;
+          const dir    = r % 2 === 0 ? 1 : -1;
+          const phase  = t * 0.18 * dir;
+          ctx.strokeStyle = rgba(r === 0 ? COLORS.lavender
+                              : r === 1 ? COLORS.cyan
+                              : COLORS.rose, alpha);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          // dashed circle, manually drawn so we can phase-shift it
+          const segments = 90;
+          for (let s = 0; s < segments; s++) {
+            const a0 = (s / segments) * Math.PI * 2 + phase;
+            const a1 = a0 + (Math.PI * 2 / segments) * 0.62;
+            ctx.moveTo(cx + Math.cos(a0) * radius * breath,
+                       cy + Math.sin(a0) * radius * breath);
+            ctx.arc(cx, cy, radius * breath, a0, a1);
+          }
+          ctx.stroke();
+        }
+
+        // 3. Inner core glow — breathes on a slow cycle.
+        const breath = 1 + 0.05 * Math.sin(t * 1.2);
+        const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseR * breath);
+        core.addColorStop(0.00, rgba(COLORS.lavender, 0.85));
+        core.addColorStop(0.45, rgba(COLORS.cyan,     0.32));
+        core.addColorStop(1.00, 'rgba(0,0,0,0)');
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR * breath, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4. Solid soft core
+        ctx.fillStyle = rgba(COLORS.lavender, 0.18);
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR * 0.46, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 5. Radial spokes — synthesized "FFT" using overlapping sines.
+        //    Each spoke gets a unique modulation to feel organic.
+        for (let i = 0; i < SPOKES; i++) {
+          const a = (i / SPOKES) * Math.PI * 2 + t * 0.05;
+          const sig = 0.5
+            + 0.30 * Math.sin(t * 1.6 + i * 0.31)
+            + 0.20 * Math.sin(t * 0.9 + i * 0.13)
+            + 0.10 * Math.sin(t * 2.4 + i * 0.05);
+          const len = baseR * (0.05 + Math.max(0, sig) * 0.28);
+          const r0  = baseR * 0.92;
+          const r1  = r0 + len;
+
+          // Mix color across the spectrum for variety
+          const mix = (Math.sin(i * 0.18 + t * 0.4) + 1) / 2;
+          const color = mix < 0.5 ? COLORS.lavender
+                      : mix < 0.85 ? COLORS.cyan
+                      : COLORS.rose;
+          ctx.strokeStyle = rgba(color, 0.6 + sig * 0.35);
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+          ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+          ctx.stroke();
+        }
+
+        // 6. A few drifting particles for depth
+        for (let p = 0; p < 6; p++) {
+          const a  = t * (0.18 + p * 0.05) + p * 1.3;
+          const rr = baseR * (1.25 + 0.15 * Math.sin(t * 0.5 + p));
+          const px = cx + Math.cos(a) * rr;
+          const py = cy + Math.sin(a) * rr;
+          ctx.fillStyle = rgba(COLORS.cyan, 0.55);
+          ctx.beginPath();
+          ctx.arc(px, py, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (!reduce) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    })();
   </script>
 </body>
 </html>

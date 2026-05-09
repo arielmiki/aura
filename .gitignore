@@ -13,3 +13,8 @@ docs/superpowers/specs/
 .DS_Store
 *.log
 *.mp3
+
+# Claude Code / superpowers framework state — local-only, not project code
+.agents/
+skills-lock.json
+.pytest_cache/

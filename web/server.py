@@ -30,6 +30,12 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 AUTO_ADAPT_EVERY_N_TURNS = 30  # check categories every N turns; hash gate skips unchanged
 
+# Use Gemini's audio-native multimodal path (one call: audio in -> transcript +
+# reply out) instead of running ElevenLabs Scribe STT first. Set to "0" to
+# force the legacy STT pipeline.
+import os as _os
+BRAIN_AUDIO_NATIVE = _os.environ.get("BRAIN_AUDIO_NATIVE", "1") not in ("0", "false", "False")
+
 
 def make_app(memory: MemoryStore,
              conversation: ConversationLog,
@@ -50,6 +56,12 @@ def make_app(memory: MemoryStore,
     @app.get("/app")
     async def app_page():
         return FileResponse(STATIC / "index.html")
+
+    @app.get("/favicon.ico")
+    async def favicon():
+        # Serve the SVG for both /favicon.ico and the explicit <link>
+        # tag, so legacy auto-discovery requests don't 404.
+        return FileResponse(STATIC / "favicon.svg", media_type="image/svg+xml")
 
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -181,49 +193,82 @@ def make_app(memory: MemoryStore,
                    image: UploadFile = File(None)):
         audio_bytes = await audio.read()
         image_bytes = await image.read() if image else None
-        log.info("turn: audio=%d bytes image=%d bytes",
-                 len(audio_bytes), len(image_bytes) if image_bytes else 0)
+        audio_mime = audio.content_type or "audio/webm"
+        log.info("turn: audio=%d bytes (%s) image=%d bytes",
+                 len(audio_bytes), audio_mime,
+                 len(image_bytes) if image_bytes else 0)
 
-        # 1. STT
-        try:
-            transcript = await asyncio.to_thread(stt.transcribe, audio_bytes)
-        except Exception:
-            log.exception("STT failed")
-            return _fallback_response(tts, "Sorry. Trouble hearing you. Question?")
+        # Try the audio-native Gemini path first: one multimodal call that
+        # both hears the user and replies, returning a transcript inline.
+        # Skips a separate STT round-trip (~700ms saved).
+        transcript: str = ""
+        reply: str = ""
+        used_audio_native = False
 
-        if not transcript:
-            return _fallback_response(tts, "Sorry. Didn't catch that.")
+        if BRAIN_AUDIO_NATIVE:
+            try:
+                # Memory recall needs a transcript, but we don't have one yet
+                # in the audio-native path. Pass a coarse prompt-side recap
+                # of recent memory facts; the model will use them naturally.
+                you_said, raw_reply = await brain.respond_audio(
+                    audio_bytes=audio_bytes,
+                    audio_mime=audio_mime,
+                    image_jpeg=image_bytes,
+                    memories=memory.facts(),
+                    conversation=conversation.recent(5),
+                    patterns=patterns.render_for_prompt(),
+                    adapted_knowledge=adapter.render_for_prompt(),
+                    inline_recall=None,
+                )
+                if you_said and raw_reply:
+                    transcript = you_said
+                    reply = raw_reply
+                    used_audio_native = True
+                    log.info("audio-native: user=%r reply=%r", you_said, raw_reply)
+                else:
+                    log.warning("audio-native returned empty transcript or reply; "
+                                "falling back to STT path")
+            except Exception:
+                log.exception("audio-native path failed; falling back to STT")
 
-        log.info("user: %s", transcript)
+        # Fallback (or default-disabled): classic STT → text-LLM pipeline.
+        if not used_audio_native:
+            try:
+                transcript = await asyncio.to_thread(stt.transcribe, audio_bytes)
+            except Exception:
+                log.exception("STT failed")
+                return _fallback_response(tts, "Sorry. Trouble hearing you. Question?")
 
-        # 1.5. Adaptive pattern detection — let signals like "shorter please"
-        # update Rocky's preferred reply length BEFORE the brain runs, so the
-        # very next reply already reflects the new preference.
+            if not transcript:
+                return _fallback_response(tts, "Sorry. Didn't catch that.")
+
+            log.info("user: %s", transcript)
+
+        # Adaptive pattern detection runs on the transcript regardless of
+        # which path produced it.
         try:
             patterns.apply_user_signal(transcript)
         except Exception:
             log.exception("pattern detection failed")
 
-        # 2. Brain — compute a small inline recap of memories most relevant
-        # to this transcript. These get injected with the user's message so
-        # Gemini cannot ignore them the way it sometimes does with long
-        # system prompts.
-        recall_hits = memory.relevant(transcript, top_k=3)
-        inline_recall = [e["fact"] for e in recall_hits] if recall_hits else None
-
-        try:
-            reply = await brain.respond(
-                transcript=transcript,
-                image_jpeg=image_bytes,
-                memories=memory.facts(),
-                conversation=conversation.recent(5),  # was 10; faster prompt
-                patterns=patterns.render_for_prompt(),
-                adapted_knowledge=adapter.render_for_prompt(),
-                inline_recall=inline_recall,
-            )
-        except Exception:
-            log.exception("Brain failed")
-            return _fallback_response(tts, "Let me think about that.")
+        # If we used the STT path, run the text brain now. The audio-native
+        # path already produced `reply` above.
+        if not used_audio_native:
+            recall_hits = memory.relevant(transcript, top_k=3)
+            inline_recall = [e["fact"] for e in recall_hits] if recall_hits else None
+            try:
+                reply = await brain.respond(
+                    transcript=transcript,
+                    image_jpeg=image_bytes,
+                    memories=memory.facts(),
+                    conversation=conversation.recent(5),
+                    patterns=patterns.render_for_prompt(),
+                    adapted_knowledge=adapter.render_for_prompt(),
+                    inline_recall=inline_recall,
+                )
+            except Exception:
+                log.exception("Brain failed")
+                return _fallback_response(tts, "Let me think about that.")
 
         log.info("rocky: %s", reply)
 

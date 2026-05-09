@@ -50,7 +50,7 @@ function setStatus(s) {
   } else {
     talkBtn.classList.remove('recording');
     if (s === 'ready' || s === 'idle') {
-      talkBtn.textContent = mode === 'ptt' ? 'TALK' : 'AUTO (open mic)';
+      talkBtn.textContent = mode === 'ptt' ? 'TALK' : 'AUTO';
     } else {
       talkBtn.textContent = s.toUpperCase();
     }

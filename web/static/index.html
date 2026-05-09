@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>Aura</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="apple-touch-icon" href="/static/favicon.svg">
+<meta name="theme-color" content="#0a0816">
 <!-- Lucide icons (open-source) — clean, consistent line icons. -->
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <style>
@@ -76,9 +79,18 @@
     padding: 4px 0;
   }
   .brand {
+    display: inline-flex; align-items: center; gap: 10px;
     font-weight: 800;
-    font-size: 22px;
-    letter-spacing: 0.4em;
+    font-size: 18px;
+    letter-spacing: 0.32em;
+    text-decoration: none;
+  }
+  .brand .mark {
+    flex: 0 0 auto;
+    width: 26px; height: 26px;
+    filter: drop-shadow(0 0 10px rgba(168,155,255,0.55));
+  }
+  .brand .name {
     background: linear-gradient(96deg, var(--primary), var(--cyan) 55%, var(--magenta));
     -webkit-background-clip: text;
     background-clip: text;
@@ -998,7 +1010,10 @@
   <div class="app">
     <header class="topbar">
       <div class="header">
-        <div class="brand">AURA</div>
+        <a href="/" class="brand" aria-label="Aura home">
+          <img class="mark" src="/static/favicon.svg" alt="" aria-hidden="true">
+          <span class="name">AURA</span>
+        </a>
         <div id="status" class="pill status-idle">idle</div>
         <div class="char-picker" id="char-picker">
           <!-- populated by app.js from /api/characters -->
