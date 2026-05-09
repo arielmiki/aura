@@ -15,7 +15,7 @@ from google.genai import types
 
 log = logging.getLogger(__name__)
 
-LIVE_MODEL = "gemini-2.5-flash-live-preview"  # verify at smoke time
+LIVE_MODEL = "gemini-3.1-flash-live-preview"
 
 
 class GeminiBrain:
