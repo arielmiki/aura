@@ -78,6 +78,8 @@ def make_app(memory: MemoryStore,
                    image: UploadFile = File(None)):
         audio_bytes = await audio.read()
         image_bytes = await image.read() if image else None
+        log.info("turn: audio=%d bytes image=%d bytes",
+                 len(audio_bytes), len(image_bytes) if image_bytes else 0)
 
         # 1. STT
         try:
