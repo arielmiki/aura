@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,9 +26,14 @@ logging.basicConfig(
 
 load_dotenv()
 
-memory = MemoryStore(path=Path("memories.json"))
-conversation = ConversationLog(path=Path("conversation.json"), max_turns=20)
-patterns = PatternStore(path=Path("patterns.json"))
+# Where to keep persistent state. Defaults to the project root for local
+# dev; on Railway/Fly/etc., mount a volume and set DATA_DIR=/data.
+DATA_DIR = Path(os.environ.get("DATA_DIR", ".")).resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+memory = MemoryStore(path=DATA_DIR / "memories.json")
+conversation = ConversationLog(path=DATA_DIR / "conversation.json", max_turns=20)
+patterns = PatternStore(path=DATA_DIR / "patterns.json")
 
 # Active character — shared across the process; switch via the API.
 active_character = CHARACTERS[DEFAULT_CHARACTER]

@@ -1,0 +1,11 @@
+# Railway service config. Pairs with Procfile for the start command.
+# Volume must be created in the Railway dashboard and mounted at the
+# path below — see README "Deploy to Railway" notes.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "uvicorn rocky:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
