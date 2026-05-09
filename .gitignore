@@ -9,3 +9,5 @@ conversation.json
 *.jpg
 docs/superpowers/specs/
 .DS_Store
+*.log
+*.mp3
