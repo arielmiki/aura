@@ -360,6 +360,39 @@
     text-align: center;
     padding: 16px 0;
   }
+
+  /* Adaptive panel */
+  .adapt-card {
+    background: linear-gradient(135deg, rgba(90,216,255,0.08), rgba(255,90,216,0.05));
+    border: 1px solid rgba(255,90,216,0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+  }
+  .adapt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .adapt-header h2 { color: var(--magenta); text-shadow: 0 0 8px rgba(255,90,216,0.4); }
+  .adapt-pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--magenta); box-shadow: 0 0 10px var(--magenta);
+    opacity: 0.5;
+  }
+  .adapt-pulse.flash { animation: adapt-flash 1.2s ease-out; }
+  @keyframes adapt-flash {
+    0%   { opacity: 1; transform: scale(1.6); box-shadow: 0 0 24px var(--magenta); }
+    100% { opacity: 0.5; transform: scale(1); box-shadow: 0 0 10px var(--magenta); }
+  }
+  .adapt-rows { display: flex; flex-direction: column; gap: 4px; }
+  .adapt-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; padding: 4px 0;
+  }
+  .adapt-key { color: var(--muted); letter-spacing: 0.15em; }
+  .adapt-val { color: var(--cyan); font-weight: 700; }
+  .adapt-val.changed { animation: adapt-val-flash 1.5s ease-out; }
+  @keyframes adapt-val-flash {
+    0%   { color: var(--green); transform: scale(1.2); }
+    100% { color: var(--cyan); transform: scale(1); }
+  }
 </style>
 </head>
 <body>
@@ -393,6 +426,26 @@
     </main>
 
     <aside>
+      <div class="adapt-card" id="adapt-card">
+        <div class="adapt-header">
+          <h2>ADAPTED</h2>
+          <span class="adapt-pulse" id="adapt-pulse"></span>
+        </div>
+        <div class="adapt-rows" id="adapt-rows">
+          <div class="adapt-row">
+            <span class="adapt-key">REPLY LIMIT</span>
+            <span class="adapt-val" id="adapt-words">8w</span>
+          </div>
+          <div class="adapt-row">
+            <span class="adapt-key">SHORTER ASKED</span>
+            <span class="adapt-val" id="adapt-shorter">0×</span>
+          </div>
+          <div class="adapt-row">
+            <span class="adapt-key">FREQ TOPICS</span>
+            <span class="adapt-val" id="adapt-topics">—</span>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <h2>MEMORIES</h2>
         <span class="memory-count" id="memory-count">0</span>

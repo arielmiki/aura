@@ -71,6 +71,14 @@ Do NOT call remember for:
 [MEMORIES]
 {memories}
 
+# How the user wants you to behave (their adaptive preferences)
+
+[USER PATTERNS]
+{patterns}
+
+You MUST honor the patterns above. Especially the reply length cap — count
+your words and stop early if needed.
+
 # Recent conversation
 
 [RECENT CONVERSATION]

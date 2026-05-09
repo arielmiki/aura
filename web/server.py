@@ -31,6 +31,7 @@ STATIC = Path(__file__).parent / "static"
 
 def make_app(memory: MemoryStore,
              conversation: ConversationLog,
+             patterns,
              brain: Brain,
              stt: STT,
              tts: TTS) -> FastAPI:
@@ -46,6 +47,10 @@ def make_app(memory: MemoryStore,
     async def api_memories():
         return {"entries": memory.entries()}
 
+    @app.get("/api/patterns")
+    async def api_patterns():
+        return patterns.state()
+
     @app.get("/memory/image/{entry_id}")
     async def memory_image(entry_id: str):
         # Strict id format guard — entry ids are 8-char uuid hex prefixes.
@@ -59,19 +64,42 @@ def make_app(memory: MemoryStore,
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):
         await websocket.accept()
-        queue = await memory.subscribe()
+        memq = await memory.subscribe()
+        patq = await patterns.subscribe()
         await websocket.send_text(json.dumps({
             "type": "snapshot",
             "entries": memory.entries(),
+            "patterns": patterns.state(),
         }))
+
+        async def fan_in():
+            # Race the two queues; whichever has an event first wins.
+            mem_task = asyncio.create_task(memq.get())
+            pat_task = asyncio.create_task(patq.get())
+            try:
+                while True:
+                    done, _ = await asyncio.wait(
+                        {mem_task, pat_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for t in done:
+                        ev = t.result()
+                        await websocket.send_text(json.dumps(ev))
+                        if t is mem_task:
+                            mem_task = asyncio.create_task(memq.get())
+                        else:
+                            pat_task = asyncio.create_task(patq.get())
+            finally:
+                for t in (mem_task, pat_task):
+                    t.cancel()
+
         try:
-            while True:
-                event = await queue.get()
-                await websocket.send_text(json.dumps(event))
+            await fan_in()
         except WebSocketDisconnect:
             pass
         finally:
-            memory.unsubscribe(queue)
+            memory.unsubscribe(memq)
+            patterns.unsubscribe(patq)
 
     @app.post("/turn")
     async def turn(audio: UploadFile = File(...),
@@ -93,6 +121,14 @@ def make_app(memory: MemoryStore,
 
         log.info("user: %s", transcript)
 
+        # 1.5. Adaptive pattern detection — let signals like "shorter please"
+        # update Rocky's preferred reply length BEFORE the brain runs, so the
+        # very next reply already reflects the new preference.
+        try:
+            patterns.apply_user_signal(transcript)
+        except Exception:
+            log.exception("pattern detection failed")
+
         # 2. Brain
         try:
             reply = await brain.respond(
@@ -100,6 +136,7 @@ def make_app(memory: MemoryStore,
                 image_jpeg=image_bytes,
                 memories=memory.facts(),
                 conversation=conversation.recent(10),
+                patterns=patterns.render_for_prompt(),
             )
         except Exception:
             log.exception("Brain failed")
