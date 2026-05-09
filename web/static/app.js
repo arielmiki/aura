@@ -67,11 +67,12 @@ if (clearMemBtn) {
   });
 }
 
-function appendTurn(youText, rockyText) {
+function appendTurn(youText, rockyText, speakerId) {
   if (isFirstTurn) {
     transcriptEl.innerHTML = '';
     isFirstTurn = false;
   }
+  const speakerLabel = (speakerId || 'rocky').toUpperCase();
   const turn = document.createElement('div');
   turn.className = 'turn';
   if (youText) {
@@ -83,7 +84,7 @@ function appendTurn(youText, rockyText) {
   if (rockyText) {
     const b = document.createElement('div');
     b.className = 'rocky';
-    b.innerHTML = '<span class="label">ROCKY</span>' + escapeHtml(rockyText);
+    b.innerHTML = '<span class="label">' + escapeHtml(speakerLabel) + '</span>' + escapeHtml(rockyText);
     turn.appendChild(b);
   }
   transcriptEl.appendChild(turn);
@@ -267,10 +268,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !lightboxEl.hidden) closeLightbox();
 });
 
-// Expose for recorder.js (keeps the existing call signature)
+// Expose for recorder.js — supports both the old (you, rocky) and the new
+// (you, rocky, speakerId) signatures.
 window.rocky = {
-  setTranscript: (you, rocky) => {
-    appendTurn(you, rocky);
+  setTranscript: (you, rocky, speakerId) => {
+    appendTurn(you, rocky, speakerId);
     // Increment the corpus turn count locally so the UI updates immediately.
     if (corpusTurnsEl) {
       lastTurnCount += 1;

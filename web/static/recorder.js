@@ -483,9 +483,10 @@ async function stopRecordingAndSubmit() {
 
   const transcript = response.headers.get('X-Transcript') || '';
   const reply = response.headers.get('X-Reply') || '';
+  const characterId = response.headers.get('X-Character') || 'rocky';
   console.log(`[rocky] heard: ${JSON.stringify(transcript)}`);
   console.log(`[rocky] reply: ${JSON.stringify(reply)}`);
-  if (window.rocky) window.rocky.setTranscript(transcript, reply);
+  if (window.rocky) window.rocky.setTranscript(transcript, reply, characterId);
 
   const mp3 = await response.blob();
   const url = URL.createObjectURL(mp3);
