@@ -91,11 +91,11 @@ class GeminiBrain:
             try:
                 if kind == "audio":
                     await self._session.send_realtime_input(
-                        media=types.Blob(data=payload, mime_type="audio/pcm;rate=16000")
+                        audio=types.Blob(data=payload, mime_type="audio/pcm;rate=16000")
                     )
                 elif kind == "image":
                     await self._session.send_realtime_input(
-                        media=types.Blob(data=payload, mime_type="image/jpeg")
+                        video=types.Blob(data=payload, mime_type="image/jpeg")
                     )
                 elif kind == "text":
                     await self._session.send_client_content(
